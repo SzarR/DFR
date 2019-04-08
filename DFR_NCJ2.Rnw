@@ -1,0 +1,348 @@
+\documentclass{article}
+\usepackage[letterpaper, margin=0.2in, lmargin = 10mm,rmargin = 10mm, bottom=0.05in]{geometry}
+\usepackage{array}
+\usepackage{wrapfig}
+\usepackage{colortbl}
+\pagestyle{empty}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+\definecolor{POblue}{cmyk}{1.0,.93,.31,.29} %Define the blue color for Reporting.
+
+<<Analyses, echo=FALSE>>=
+# opts_chunk$set(
+# concordance=TRUE)
+
+Candidate    <- TOAST[i,] #Select ID Number you want to run percentile report on ******************************
+
+#Demographic Recoding
+Candidate$Gender    <- ifelse(Candidate$Gender ==1,"Male",ifelse(Candidate$Gender ==2,"Female","N/A"))
+Candidate$Race   <- ifelse(Candidate$Race ==1,"Black",ifelse(Candidate$Race ==2,"Asian",ifelse(Candidate$Race==3,
+                    "Hispanic",ifelse(Candidate$Race==4,"Native American",ifelse(Candidate$Race==5, "Pac. Islander",
+                    ifelse(Candidate$Race==6,"White",
+                    ifelse(Candidate$Race==7,"Two or More","N/A")))))))
+
+#Random execution bits =========================
+#Create one Matrix for all data.
+PercentilesMatrix <- data.frame(matrix(0,17,3))
+names(PercentilesMatrix) <- c("Dimension","Percentile","Color_Tier") #Naming the Matrix
+
+#Composite Score Calculation ===================
+PercentilesMatrix[1,1]     <- c("Composite")
+PercentilesMatrix[1,2]     <- ifelse((pnorm(q = Candidate$Final_Score, mean = Middleman$Score_Mean, sd = Middleman$Score_SD)*100) < 5,
+                                     ceiling(pnorm(q = Candidate$Final_Score, mean = Middleman$Score_Mean, sd = Middleman$Score_SD)*100),
+                                     trunc(pnorm(q = Candidate$Final_Score, mean = Middleman$Score_Mean, sd = Middleman$Score_SD)*100))#Calculate Percentile
+
+                                     
+#Cognitive Score Calculation ===================
+PercentilesMatrix[2,1]     <- c("Overall Cognitive")
+PercentilesMatrix[2,2]     <- ifelse((pnorm(q = Candidate$Cognitive_TScore, mean = Middleman$Cognitive_Mean, sd = Middleman$Cognitive_SD)*100) < 5,
+                                     ceiling(pnorm(q = Candidate$Cognitive_TScore, mean = Middleman$Cognitive_Mean, sd = Middleman$Cognitive_SD)*100),
+                                     trunc(pnorm(q = Candidate$Cognitive_TScore, mean = Middleman$Cognitive_Mean, sd = Middleman$Cognitive_SD)*100))                                     
+
+PercentilesMatrix[3:12,1]  <- c("Deductive Reasoning","Flexibility of Closure", "Information Gathering", "Inductive Reasoning",
+                                "Problem Sensitivity","Selective Attention","Spatial Orientation","Verbal Comprehension","Verbal Expression",
+                                "Visualization")
+
+PercentilesMatrix[3,2]     <- ifelse((pnorm(q = Candidate$DR, mean = Middleman$DR_Mean, sd = Middleman$DR_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$DR, mean = Middleman$DR_Mean, sd = Middleman$DR_SD)*100),
+                                     trunc(pnorm(q = Candidate$DR, mean = Middleman$DR_Mean, sd = Middleman$DR_SD)*100))
+
+PercentilesMatrix[4,2]     <- ifelse((pnorm(q = Candidate$FC, mean = Middleman$FC_Mean, sd = Middleman$FC_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$FC, mean = Middleman$FC_Mean, sd = Middleman$FC_SD)*100),
+                                     trunc(pnorm(q = Candidate$FC, mean = Middleman$FC_Mean, sd = Middleman$FC_SD)*100))
+
+PercentilesMatrix[5,2]     <- ifelse((pnorm(q = Candidate$IG, mean = Middleman$IG_Mean, sd = Middleman$IG_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$IG, mean = Middleman$IG_Mean, sd = Middleman$IG_SD)*100),
+                                     trunc(pnorm(q = Candidate$IG, mean = Middleman$IG_Mean, sd = Middleman$IG_SD)*100))
+
+PercentilesMatrix[6,2]     <- ifelse((pnorm(q = Candidate$IR, mean = Middleman$IR_Mean, sd = Middleman$IR_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$IR, mean = Middleman$IR_Mean, sd = Middleman$IR_SD)*100),
+                                     trunc(pnorm(q = Candidate$IR, mean = Middleman$IR_Mean, sd = Middleman$IR_SD)*100))
+
+PercentilesMatrix[7,2]     <- ifelse((pnorm(q = Candidate$PS, mean = Middleman$PS_Mean, sd = Middleman$PS_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$PS, mean = Middleman$PS_Mean, sd = Middleman$PS_SD)*100),
+                                     trunc(pnorm(q = Candidate$PS, mean = Middleman$PS_Mean, sd = Middleman$PS_SD)*100))
+
+PercentilesMatrix[8,2]     <- ifelse((pnorm(q = Candidate$SA, mean = Middleman$SA_Mean, sd = Middleman$SA_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$SA, mean = Middleman$SA_Mean, sd = Middleman$SA_SD)*100),
+                                     trunc(pnorm(q = Candidate$SA, mean = Middleman$SA_Mean, sd = Middleman$SA_SD)*100))
+
+PercentilesMatrix[9,2]     <- ifelse((pnorm(q = Candidate$SO, mean = Middleman$SO_Mean, sd = Middleman$SO_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$SO, mean = Middleman$SO_Mean, sd = Middleman$SO_SD)*100),
+                                     trunc(pnorm(q = Candidate$SO, mean = Middleman$SO_Mean, sd = Middleman$SO_SD)*100))
+
+PercentilesMatrix[10,2]    <- ifelse((pnorm(q = Candidate$VC, mean = Middleman$VC_Mean, sd = Middleman$VC_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$VC, mean = Middleman$VC_Mean, sd = Middleman$VC_SD)*100),
+                                     trunc(pnorm(q = Candidate$VC, mean = Middleman$VC_Mean, sd = Middleman$VC_SD)*100))
+
+PercentilesMatrix[11,2]    <- ifelse((pnorm(q = Candidate$VE, mean = Middleman$VE_Mean, sd = Middleman$VE_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$VE, mean = Middleman$VE_Mean, sd = Middleman$VE_SD)*100),
+                                     trunc(pnorm(q = Candidate$VE, mean = Middleman$VE_Mean, sd = Middleman$VE_SD)*100))
+
+PercentilesMatrix[12,2]    <- ifelse((pnorm(q = Candidate$VIS, mean = Middleman$VIS_Mean, sd = Middleman$VIS_SD)*100)  < 5,
+                                     ceiling(pnorm(q = Candidate$VIS, mean = Middleman$VIS_Mean, sd = Middleman$VIS_SD)*100),
+                                     trunc(pnorm(q = Candidate$VIS, mean = Middleman$VIS_Mean, sd = Middleman$VIS_SD)*100))
+
+#Non-Cognitive Score Calculation ==============
+PercentilesMatrix[13,1]    <- c("Overall Non-Cognitive")
+PercentilesMatrix[13,2]    <- ifelse((pnorm(q = Candidate$Integrity_TScore, mean = Middleman$Integrity_Mean, sd = Middleman$Integrity_SD)*100)  < 5, #Positive Scale.
+                                     ceiling(pnorm(q = Candidate$Integrity_TScore, mean = Middleman$Integrity_Mean, sd = Middleman$Integrity_SD)*100),
+                                     trunc(pnorm(q = Candidate$Integrity_TScore, mean = Middleman$Integrity_Mean, sd = Middleman$Integrity_SD)*100))  
+
+PercentilesMatrix[14:17,1] <- c("Anti-Social Behaviors*","Positive Outlook","Diligence/Orderliness","Socialization")
+PercentilesMatrix[14,2]    <- (100-(pnorm(q = Candidate$ASB, mean = Middleman$ASB_Mean, sd = Middleman$ASB_SD)*100)) #Reverse Scale.
+
+#Bottom Out the ASB Score for 99 Percentile to Print.
+Candidate$ASB <- ifelse(Candidate$ASB < 100, 100, Candidate$ASB)
+PercentilesMatrix[14,2]    <- ifelse((100-(pnorm(q = Candidate$ASB, mean = Middleman$ASB_Mean, sd = Middleman$ASB_SD)*100))  < 5, #Positive Scale.
+                                     ceiling(100-(pnorm(q = Candidate$ASB, mean = Middleman$ASB_Mean, sd = Middleman$ASB_SD)*100)),
+                                     trunc(100-(pnorm(q = Candidate$ASB, mean = Middleman$ASB_Mean, sd = Middleman$ASB_SD)*100))) 
+
+PercentilesMatrix[15,2]    <- ifelse((pnorm(q = Candidate$PO, mean = Middleman$PO_Mean, sd = Middleman$PO_SD)*100)  < 5, #Positive Scale.
+                                     ceiling(pnorm(q = Candidate$PO, mean = Middleman$PO_Mean, sd = Middleman$PO_SD)*100),
+                                     trunc(pnorm(q = Candidate$PO, mean = Middleman$PO_Mean, sd = Middleman$PO_SD)*100))
+
+PercentilesMatrix[16,2]    <- ifelse((pnorm(q = Candidate$DO, mean = Middleman$DO_Mean, sd = Middleman$DO_SD)*100)  < 5, #Positive Scale.
+                                     ceiling(pnorm(q = Candidate$DO, mean = Middleman$DO_Mean, sd = Middleman$DO_SD)*100),
+                                     trunc(pnorm(q = Candidate$DO, mean = Middleman$DO_Mean, sd = Middleman$DO_SD)*100))
+
+PercentilesMatrix[17,2]    <- ifelse((pnorm(q = Candidate$SOC, mean = Middleman$SOC_Mean, sd = Middleman$SOC_SD)*100)  < 5, #Positive Scale.
+                                     ceiling(pnorm(q = Candidate$SOC, mean = Middleman$SOC_Mean, sd = Middleman$SOC_SD)*100),
+                                     trunc(pnorm(q = Candidate$SOC, mean = Middleman$SOC_Mean, sd = Middleman$SOC_SD)*100)) 
+
+#Set Cuts for coloring based on values. Positive Scales.
+PercentilesMatrix$Color_Tier    <- ifelse(PercentilesMatrix$Percentile > 0 & PercentilesMatrix$Percentile <= 25, 1,
+                                ifelse((PercentilesMatrix$Percentile > 25 & PercentilesMatrix$Percentile <= 50), 2,
+                                ifelse((PercentilesMatrix$Percentile > 50 & PercentilesMatrix$Percentile <= 75), 3, 4
+                                )))
+
+#Set Different cuts for negative scales
+PercentilesMatrix[14,3]    <- ifelse(PercentilesMatrix[14,2] > 0 & PercentilesMatrix[14,2] <= 25, 9,
+                                                ifelse((PercentilesMatrix[14,2] > 25 & PercentilesMatrix[14,2] <= 50), 8,
+                                                ifelse((PercentilesMatrix[14,2] > 50 & PercentilesMatrix[14,2] <= 75), 7, 6
+                                                 )))
+
+PercentilesMatrix$Color_Tier <- as.factor(PercentilesMatrix$Color_Tier)
+
+#Time Variable.
+Timee <- format(Sys.Date(), "%B %d, %Y")
+@
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=1.01\textwidth]{Figure/DFR_NCJ2}
+\end{figure}
+
+%Demographics Table.
+\begin{table}[h]
+\vspace{-9pt}
+\fontsize{11}{11} %font size of the table.
+\begin{flushleft} %This puts the table on the left hand side of the page.
+\begin{tabular}{p{3.7cm} p{3.7cm}} %This ensures column width spacing is fixed, so it cannot float. the left column = 4cm width, right column = 3cm width.
+    \multicolumn{2}{l}{\Large{\textbf{{  \Sexpr{substr(x = Candidate$LName,start = 1,stop = 14)},  \Sexpr{substr(x = Candidate$FName,start = 1,stop = 14)}}}}}\\
+      \noalign{\global\arrayrulewidth=2mm} %Controls the thickness of the line appearing under Candidate Name.
+    \arrayrulecolor{POblue}\hline \\[-.7em] %Controls the color of the horizontal line appearing under Candidate Name.The -.7em is to put vertical buffer under line.
+    \textbf{{ID:}} \Sexpr{Candidate$ID} & \textbf{{Score:}} \Sexpr{round(Candidate$Final_Score, digits = 4)} \\
+    \textbf{{Gender:}} \Sexpr{Candidate$Gender} & \textbf{{Status:}} \Sexpr{ifelse(Candidate$Status == 1,"Pass","Did Not Pass")} \\
+    \textbf{{Race:}} \Sexpr{Candidate$Race} & \textbf{{Exam:}} Form \Sexpr{SetForm} \\
+    
+\end{tabular}
+\end{flushleft}
+\end{table}
+
+\vspace{-28pt} %Remove some vertical spacing to make it all line up properly.
+\begin{flushleft}
+\noindent\hspace{0.07in}{\textbf{{Administration Date:}} \Sexpr{DateOfAdmin}} \\
+\noindent\hspace{0.07in}{\textbf{{Agency:}} \Sexpr{substr(x = File_Name2,start = 1,stop = 36)}       } \\
+\noindent\hspace{0.07in}{\textbf{{Candidate Rank:}} \Sexpr{i} of \Sexpr{nrow(TOAST)}.}
+\end{flushleft}
+
+%Using This Report Table.
+\begin{table}[h]
+\vspace{-115pt}  %For spacing purposes.
+\fontsize{11}{11} %font size of the table.
+\begin{flushright} %This puts the table on the right hand side of the page.
+\begin{tabular}{p{10cm}} %This ensures the column is  10cm wide.
+    \multicolumn{1}{l}{\Large{\textbf{{Using This Report}}}}\\
+      \noalign{\global\arrayrulewidth=2mm} %Controls the thickness of the line appearing under Candidate Name.
+    \arrayrulecolor{POblue}\hline \\[-.7em] %Controls the color of the horizontal line appearing under Candidate Name.
+This report uses percentiles to illustrate your candidate's performance on  
+the exam. A "percentile" is determined by comparing an individual to other test-takers
+in our national sample of data. The values presented in this report indicate the 
+percentile in which the individual falls, or the percentage of test-takers the individual has 
+outscored. For example, an individual scoring in the 95th percentile has outscored 95 percent 
+of all individuals in the sample. \textcolor{red}{Note: This report is intended for departmental use only.} \\
+\end{tabular}
+\end{flushright}
+\end{table}
+
+\vspace{-21pt}
+\begin{center}
+\noindent{\Large{\textbf{{Final Score Percentile}}}}
+\textcolor{POblue}{\rule{18cm}{2mm}} 
+\end{center}
+
+<<Final Score Graphic, echo=FALSE, warning = FALSE>>=
+FinalScore_Graphic <- 
+  ggplot(PercentilesMatrix[1,], aes(x=Dimension,
+                                    y=Percentile,
+                                    fill = Color_Tier)) + 
+  geom_bar(stat="identity") +  coord_flip(ylim=c(0,102)) + 
+  geom_text(family = "sans",
+            aes(label=round(Percentile,digits = 0)),
+            nudge_y = ifelse(PercentilesMatrix[1,2] < 3, 2, -2),
+            size=5, colour=ifelse(PercentilesMatrix[1,2] <= 25, "#002060", "white"),
+            fontface="bold") + 
+  theme(axis.title.y=element_blank(),
+        axis.text=element_text(size=11, family = "sans"), 
+        axis.text.y=element_blank(), 
+        axis.title.x=element_blank(),
+        axis.ticks=element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) + 
+  geom_hline(yintercept = c(25,50,75), colour="white") + 
+  scale_y_continuous(c(0,100),expand = c(0,0))  +
+  scale_fill_manual(values=c("1" = "#55b1f7","2" = "#3e80b7","3" = "#28537a","4" = "#002060")) + 
+  guides(fill=FALSE)
+
+ggsave(FinalScore_Graphic, 
+       file=paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","DFR_FinalScore_Graphic.png"),
+       units="in",
+       device = "png",
+       dpi = 300, 
+       width = 7.34, 
+       height=0.58)
+@
+
+\begin{figure}[h!]
+\vspace{-16pt}
+\centering
+\includegraphics{Figure/DFR_FinalScore_Graphic}
+\end{figure}
+\vspace{-8pt}
+
+\begin{center}
+\vspace{-10pt}
+\fontsize{12}{12} \textbf{\indent{Cognitive Subdimension Percentiles}} 
+\vspace{-15pt}
+\end{center}
+
+<<Cognitive Dimensions Graphic, echo=FALSE, warning = FALSE>>=
+Cognitive_Graphic <- 
+  ggplot(PercentilesMatrix[2:12,], 
+         aes(x=Dimension, 
+             y=Percentile, 
+             fill = Color_Tier)) + 
+  geom_bar(stat="identity", width = .6) +  
+  coord_flip(ylim=c(0,102)) + 
+  geom_text(family = "sans",
+            aes(label=round(Percentile,digits = 0)),
+            nudge_y = ifelse(PercentilesMatrix[2:12,2] < 5, 2, -3),
+            size=4, 
+            colour=ifelse(PercentilesMatrix[2:12,2] <= 25, "#002060", "white"),
+            fontface="bold") + 
+  theme(plot.title = element_text(family = "sans",
+                                  size = 12,
+                                  hjust = 0.39),
+        axis.title.y=element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        axis.text.x=element_text(size=11, family = "sans",colour = "black"),
+        axis.text.y=element_text(size=c(rep(11,10), 13), 
+                                 family = "sans",
+                                 colour = "black",
+                                 face = c(rep("plain",10),"bold")),
+        axis.title.x=element_blank()) + 
+  geom_hline(yintercept = c(25,50,75), 
+             colour="white") + 
+  scale_y_continuous(c(0,100),expand = c(0,0)) + 
+  scale_x_discrete(limits = c("Visualization","Verbal Expression","Verbal Comprehension", "Spatial Orientation","Selective Attention","Problem Sensitivity","Inductive Reasoning",      "Information Gathering", "Flexibility of Closure", "Deductive Reasoning", "Overall Cognitive")) + 
+  scale_fill_manual(values=c("1" = "#55b1f7","2" = "#3e80b7","3" = "#28537a","4" = "#002060")) + 
+  guides(fill=FALSE)
+
+ggsave(Cognitive_Graphic, 
+       file=paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","DFR_Cognitive_Graphic.png"),
+       units="mm",
+       device = "png",
+       dpi = 275, 
+       width = 192, 
+       height=76) #was 68
+@
+
+\begin{figure}[h!]
+\vspace{-2pt}
+\includegraphics{Figure/DFR_Cognitive_Graphic}
+\end{figure}
+
+\begin{center}
+\vspace{-17pt}
+\fontsize{12}{12} \textbf{\indent{Non-Cognitive Subdimension Percentiles}} 
+\vspace{-17pt}
+\end{center}
+
+<<Non-Cognitive Dimensions Graphic, echo=FALSE, warning = FALSE>>=
+NonCognitive_Graphic <-
+  ggplot(PercentilesMatrix[13:17, ],
+         aes(x = Dimension, 
+             y = Percentile, 
+             fill = Color_Tier)) + 
+  geom_bar(stat = "identity", width = .6) + 
+  coord_flip(ylim = c(0, 102)) + 
+  geom_text(family = "sans", aes(label = round(Percentile, 
+                                               digits = 0)),
+            nudge_y = ifelse(PercentilesMatrix[13:17,2] < 26, 2, -3), #Truly a bug. This keeps searching for a vector of 1 result but it works OK.
+            size = 4,
+            colour =  ifelse(PercentilesMatrix[13:17,2] <= 25 ,"#002060", "white"), 
+            fontface = "bold") + 
+  theme(plot.title = element_text(family = "sans",
+         size = 12,
+         hjust = 0.39),
+        axis.title.y = element_blank(), 
+        axis.ticks = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+         axis.text.x = element_text(size = 11,family = "sans", colour = "black"), 
+        axis.text.y = element_text(size = c(rep(11, 4), 13),
+                                   family = "sans",
+                                   colour = "black",
+                                   face = c(rep("plain", 3), "italic", "bold")), 
+        axis.title.x = element_blank(),  
+        plot.caption = element_text(hjust = 0, 
+                                    face = "italic", 
+                                    size = 9)) + 
+         geom_hline(yintercept = c(25, 50, 75),
+                    colour = "white") + 
+  scale_y_continuous(c(0, 100), expand = c(0, 0)) + 
+  scale_x_discrete(limits = c( "Socialization","Diligence/Orderliness","Positive Outlook","Anti-Social Behaviors*","Overall Non-Cognitive"))  +
+  scale_fill_manual(values = c("1" = "#55b1f7","2" = "#3e80b7","3" = "#28537a","4" = "#002060","9" = "#002060","8" = "#28537a","7" = "#3e80b7","6" = "#55b1f7")) + 
+        guides(fill = FALSE) + 
+  labs(caption = "Note: Asterisk (*) signifies reversed scales.")
+
+ggsave(NonCognitive_Graphic, 
+       file=paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","DFR_NonCognitive_Graphic.png"), 
+       units="mm",
+       device = "png",
+       dpi = 275, 
+       width = 192, 
+       height=47) #was 35
+@
+
+\begin{figure}[h!]
+\includegraphics{Figure/DFR_NonCognitive_Graphic}
+\end{figure}
+
+% \vspace{-10pt}
+% \begin{wrapfigure}{r}{0.17\textwidth}
+% \includegraphics[width=0.18\textwidth]{Figure/IOS_Emblem}
+% \end{wrapfigure}
+% \noindent{}
+
+\begin{flushleft}
+\vspace{45pt}
+\fontsize{10}{10} \indent{Copyright \textsuperscript{\textcopyright} 2019 IOS, Inc. Document Generated on \Sexpr{Timee}.}
+\end{flushleft}
+
+\end{document}
