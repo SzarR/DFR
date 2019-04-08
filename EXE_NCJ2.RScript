@@ -1,0 +1,271 @@
+# ------------ PRELIMINARY LOADS ----------------
+library("haven")
+library("tabulizer")
+library("tidyverse")
+library("lubridate")
+library("tm")
+library("xlsx")
+library("stringr")
+library("tools")
+library("labelled") #Necessary for Race Recoding feature.
+
+if("plyr" %in% (.packages())){
+  detach("package:plyr", unload=TRUE) 
+}
+
+# ------------ SET WORKING DIRECTORY ----------------
+setwd("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/")
+
+# ------------ SET OPTIONS ----------------
+Min_Thresh <- 10 #This sets the minimum threshold for triggering the printing of AIR in all four graphics in IR.
+
+# ------------ TIDY FOLDER ----------------
+file.remove(list.files("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/",full.names = TRUE, pattern= c(".pdf",".csv",".tex",".aux")))
+
+# --------STEP ONE: Read in Local Data Set & Options ------------------
+File_Name   <- list.files("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Data")
+TOAST       <- read_sav(file = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Data/",File_Name)) #TOAST is the name of the local file. It's arbitrary.
+SetForm     <- as.numeric(str_sub(string = File_Name, start = 1, end = 2)) #Extract form number from file name. The first number of the file name.
+File_Name2  <- removeNumbers(File_Name)
+File_Name2  <- gsub(c("doa"),"",File_Name2,ignore.case = TRUE)
+File_Name2  <- gsub(c(".sav"),"",File_Name2,ignore.case = TRUE)
+File_Name2  <- gsub(c("-"),"",File_Name2) #Added dash as a removal necessity for this.
+File_Name2  <- str_sub(string = File_Name2, start = 1,end = as.numeric(gregexpr(pattern = "\\{", File_Name2))[[1]]) #New code to extract whatever comes after { and remove.
+File_Name2  <- gsub(c("\\{"), "",File_Name2, ignore.case = TRUE) #trims
+File_Name2  <- trimws(File_Name2,which = "both")
+
+#For Date of Admin, we have done away with extracting this from the file and rather grab it now from the file name. This simplifies things tremendously.
+DOA_Location <- gregexpr(pattern="doa",ignore.case = TRUE, File_Name)[[1]][1] + 4  #Find location of the "DOA" within the file name vector. The value represents the "D" in "DOA".
+DateOfAdmin  <- str_sub(File_Name, start = DOA_Location,end = (DOA_Location + 5))  
+DateOfAdmin  <- mdy(DateOfAdmin)
+DateOfAdmin  <- format(DateOfAdmin, format = "%B %d, %Y")
+
+#Custom Race Recode for NCJ2 ONLY.
+#This was created because CAUC = 5 and CAUC = 6 depending on answer sheet read-in.
+#I need to attempt to parse out value labels associated with Race variable to determine appropriate coding.
+#The code below states, if White = 5, run the code in parentheses.
+#This code will not need to be executed UNLESS the data finds errors in race coding.
+#INTRODUCE Racial Code Checking Algorithm.
+if((val_label(TOAST$Race,5)) == "White") 
+ { TOAST$Race <- zap_labels(TOAST$Race) #Remove the old variable labels.
+   TOAST$Race <- recode(TOAST$Race, '1' = 1, '2' = 2, '3' = 3, '4' = 4, '5' = 6, '6' = 7)
+   
+   TOAST <- TOAST %>%
+   set_value_labels(Race = c("African American/Black" = 1, 
+                             "Asian" = 2, 
+                             "Hispanic" = 3, 
+                             "American Indian/Native Alaskan" = 4,
+                             "Pacific Islander/Native Hawaiian" = 5,
+                             "White" = 6,
+                             "Two or More Races" = 7))
+}
+
+# --------STEP TWO: Read-In NORM Dataset and Re-Run Analyses ------------------
+NCJ2_NORM <- read_sav(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2 NORM SCORED.sav")
+
+# --------STEP THREE: Build Middleman.XLSX ------------------
+AIR_ByRegion <-
+  NCJ2_NORM %>%
+  group_by(Region) %>%
+  summarise(Sample = n(),
+            Black_AIR = (mean(Status[Race == 1],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Black_N = (sum(Race == 1,na.rm = TRUE)),
+            Hispanic_AIR = (mean(Status[Race == 3],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Hispanic_N = (sum(Race == 3,na.rm = TRUE)),
+            Asian_AIR = (mean(Status[Race == 2],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)), 
+            Asian_N = (sum(Race == 2,na.rm = TRUE)),
+            NatAmer_AIR = (mean(Status[Race == 4],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            NatAmer_N = (sum(Race == 4,na.rm = TRUE)),
+            PacIsl_AIR = (mean(Status[Race == 5],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            PacIsl_N = (sum(Race == 5,na.rm = TRUE)),
+            Other_AIR = (mean(Status[Race == 7],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Other_N = (sum(Race == 7,na.rm = TRUE)),
+            Female_AIR = (mean(Status[Gender == 2], na.rm = TRUE))/(mean(Status[Gender == 1], na.rm = TRUE)),
+            Female_N = (sum(Gender == 2,na.rm = TRUE)))
+write.xlsx(x = as.data.frame(AIR_ByRegion), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "AIR_ByRegion")
+
+AIR_BySubRegion <-
+  NCJ2_NORM %>%
+  group_by(SubRegion) %>%
+  summarise(Sample = n(),
+            Black_AIR = (mean(Status[Race == 1],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Black_N = (sum(Race == 1,na.rm = TRUE)),
+            Hispanic_AIR = (mean(Status[Race == 3],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)), 
+            Hispanic_N = (sum(Race == 3,na.rm = TRUE)),
+            Asian_AIR = (mean(Status[Race == 2],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Asian_N = (sum(Race == 2,na.rm = TRUE)),
+            Other_AIR = (mean(Status[Race == 7],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Other_N = (sum(Race == 7,na.rm = TRUE)),
+            NatAmer_N = (mean(Status[Race == 4],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            NatAmer_N = (sum(Race == 4,na.rm = TRUE)),
+            PacIsl_AIR = (mean(Status[Race == 5],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            PacIsl_N = (sum(Race == 5,na.rm = TRUE)),
+            Female_AIR = (mean(Status[Gender == 2], na.rm = TRUE))/(mean(Status[Gender == 1], na.rm = TRUE)),
+            Female_N = (sum(Gender == 2,na.rm = TRUE)))
+write.xlsx(x = as.data.frame(AIR_BySubRegion), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "AIR_BySubRegion",append = TRUE)
+
+AIR_ByState <-
+  NCJ2_NORM %>%
+  group_by(Region,SubRegion, State) %>%
+  summarise(Sample = n(),
+            Black_AIR = (mean(Status[Race == 1],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Black_N = (sum(Race == 1,na.rm = TRUE)),
+            Hispanic_AIR = (mean(Status[Race == 3],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)), 
+            Hispanic_N = (sum(Race == 3,na.rm = TRUE)),
+            Asian_AIR = (mean(Status[Race == 2],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Asian_N = (sum(Race == 2,na.rm = TRUE)),
+            Other_AIR = (mean(Status[Race == 7],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Other_N = (sum(Race == 7,na.rm = TRUE)),
+            NatAmer_AIR = (mean(Status[Race == 4],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            NatAmer_N = (sum(Race == 4, na.rm = TRUE)),
+            PacIsl_AIR = (mean(Status[Race == 5],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            PacIsl_N = (sum(Race == 5,na.rm = TRUE)),
+            Female_AIR = (mean(Status[Gender == 2], na.rm = TRUE))/(mean(Status[Gender == 1], na.rm = TRUE)),
+            Female_N = (sum(Gender == 2,na.rm = TRUE)))
+write.xlsx(x = as.data.frame(AIR_ByState), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "AIR_ByState",append = TRUE)
+
+Passing_ByState <-
+  NCJ2_NORM %>%
+  group_by(Region,SubRegion, State) %>%
+  summarise(Sample = n(),
+            Passing = mean(Status))
+write.xlsx(x = as.data.frame(Passing_ByState), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "Passing_ByState",append = TRUE)
+
+AIR_ByForm <-
+  NCJ2_NORM %>%
+  group_by(Form) %>%
+  summarise(Sample = n(),
+            Black_AIR = (mean(Status[Race == 1],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Black_N = (sum(Race == 1,na.rm = TRUE)),
+            Hispanic_AIR = (mean(Status[Race == 3],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)), 
+            Hispanic_N = (sum(Race == 3,na.rm = TRUE)),
+            Asian_AIR = (mean(Status[Race == 2],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Asian_N = (sum(Race == 2,na.rm = TRUE)),
+            Other_AIR = (mean(Status[Race == 7],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Other_N = (sum(Race == 7,na.rm = TRUE)),
+            NatAmer_AIR = (mean(Status[Race == 4],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            NatAmer_N = (sum(Race == 4, na.rm = TRUE)),
+            PacIsl_AIR = (mean(Status[Race == 5],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            PacIsl_N = (sum(Race == 5,na.rm = TRUE)),
+            Female_AIR = (mean(Status[Gender == 2], na.rm = TRUE))/(mean(Status[Gender == 1], na.rm = TRUE)),
+            Female_N = (sum(Gender == 2,na.rm = TRUE)))
+write.xlsx(x = as.data.frame(AIR_ByForm), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "AIR_ByForm",append = TRUE)
+
+AIR_National <-
+  NCJ2_NORM %>%
+  summarise(Sample = n(),
+            Black_AIR = (mean(Status[Race == 1],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Black_N = (sum(Race == 1,na.rm = TRUE)),
+            Hispanic_AIR = (mean(Status[Race == 3],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)), 
+            Hispanic_N = (sum(Race == 3,na.rm = TRUE)),
+            Asian_AIR = (mean(Status[Race == 2],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Asian_N = (sum(Race == 2,na.rm = TRUE)),
+            Other_AIR = (mean(Status[Race == 7],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            Other_N = (sum(Race == 7,na.rm = TRUE)),
+            NatAmer_AIR = (mean(Status[Race == 4],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            NatAmer_N = (sum(Race == 4, na.rm = TRUE)),
+            PacIsl_AIR = (mean(Status[Race == 5],na.rm = TRUE))/(mean(Status[Race == 6],na.rm = TRUE)),
+            PacIsl_N = (sum(Race == 5,na.rm = TRUE)),
+            Female_AIR = (mean(Status[Gender == 2], na.rm = TRUE))/(mean(Status[Gender == 1], na.rm = TRUE)),
+            Female_N = (sum(Gender == 2,na.rm = TRUE)))
+write.xlsx(x = as.data.frame(AIR_National), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "AIR_National",append = TRUE)
+
+#Building of Average Scores for the DFR Product.
+MEANS_ByForm <-
+  NCJ2_NORM %>%
+  group_by(Form) %>%
+  summarise(Sample = n(),
+            Score_Mean = mean(Final_Score), Score_SD = sd(Final_Score),
+            Cognitive_Mean = mean(Cognitive_TScore), Cognitive_SD = sd(Cognitive_TScore),
+            Integrity_Mean = mean(Integrity_TScore), Integrity_SD = sd(Integrity_TScore),
+            DR_Mean = mean(DR), DR_SD = sd(DR),
+            IR_Mean = mean(IR), IR_SD = sd(IR),
+            VC_Mean = mean(VC), VC_SD = sd(VC),
+            VE_Mean = mean(VE), VE_SD = sd(VE),
+            FC_Mean = mean(FC), FC_SD = sd(FC),
+            IG_Mean = mean(IG), IG_SD = sd(IG),
+            PS_Mean = mean(PS), PS_SD = sd(PS),
+            SA_Mean = mean(SA), SA_SD = sd(SA),
+            SO_Mean = mean(SO), SO_SD = sd(SO),
+            VIS_Mean = mean(VIS), VIS_SD = sd(VIS),
+            ASB_Mean = mean(ASB), ASB_SD = sd(ASB),
+            PO_Mean = mean(PO), PO_SD = sd(PO),
+            DO_Mean = mean(DO), DO_SD = sd(DO),
+            SOC_Mean = mean(SOC), SOC_SD = sd(SOC),
+            PassingPCT = mean(Status))
+write.xlsx(x = as.data.frame(MEANS_ByForm), file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+           sheetName = "MEANS_ByForm",append = TRUE)
+
+# --------STEP FOUR: Read-In XLSX AIR/M/SD Results for Processing ------------------
+Middleman_Region <- read.xlsx(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+                              as.data.frame = TRUE,
+                              sheetName = "AIR_ByRegion")
+
+Middleman_SubRegion <- read.xlsx(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+                                 as.data.frame = TRUE,
+                                 sheetName = "AIR_BySubRegion")
+
+Middleman_State <- read.xlsx(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+                             as.data.frame = TRUE, 
+                             sheetName = "AIR_ByState")
+
+Middleman_National <- read.xlsx(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+                                as.data.frame = TRUE, 
+                                sheetName = "AIR_National")
+
+# #Version for DFR.
+Middleman <- read.xlsx(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2_Middleman.xlsx",
+                       sheetName = "MEANS_ByForm")
+
+
+if(sum(TOAST$Race == 6, na.rm=TRUE) > 1){ #Sum here the total whites testing in Toast, if 0 then dont create IR.
+# --------STEP FIVE: Read-In XLSX AIR/M/SD Results for building IR ------------------
+knitr::knit(input    = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/IR_NCJ2.Rnw",
+            output   = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/NCJ2_ImpactReporter.tex")
+tools::texi2pdf(file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/NCJ2_ImpactReporter.tex",clean = TRUE,quiet = FALSE)
+file.remove(list.files("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/",full.names = TRUE, pattern= ".tex"))
+
+# --------STEP FIVE: Conditional Deletion of PDF File if AIR extremely low. ------------------
+if(AA_AIR < .75 & ALL_Testing > 100 & AA_Testing > 10){file.remove("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/NCJ2_ImpactReporter.pdf");
+  write.csv(x = tibble(X = 1),file = "G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Adverse Impact Too Low for AA - Please Modify Scoring.csv")}
+}
+# -------- STEP SEVEN: Preparation for Import ---------------------
+TOAST$ID <- str_sub(string = TOAST$ID ,start = -4) #Make this variable Numeric.
+
+#Subset Middleman based on Form.
+Middleman <- Middleman %>%
+  filter(Form == SetForm)
+
+#Ensure TOAST Is Sorted descending order on Final_Score.
+TOAST <- arrange(TOAST, desc(Final_Score))
+
+# -------- STEP EIGHT: Create PDF DFRs ---------------------
+#Cycle through all row numbers to create DFR per candidate.
+for (i in (1:nrow(TOAST))){
+  knitr::knit(input = 'G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/DFR_NCJ2.Rnw',
+              output =  paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/","report_", paste0(i,"_","of_",nrow(TOAST)),".tex", sep=''))
+  tools::texi2pdf(file = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/","report_", paste0(i,"_","of_",nrow(TOAST)),".tex", sep=''),clean = TRUE,quiet = FALSE)
+  file.remove(paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/","report_", paste0(i,"_","of_",nrow(TOAST)),".tex", sep=''))
+}
+
+#Manipulation of Data File Save Locations.
+#Bottom code developed in order to combine PDF files dependent upon whether ImpactReporter exists or Not. It may have been deleted because AIR too high.
+if(file.exists("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/NCJ2_ImpactReporter.PDF")){
+                PDF_Ordering <- c(paste0("NCJ2_ImpactReporter.pdf"),paste0("report_",1:nrow(TOAST),"_of_",nrow(TOAST), ".pdf"))}
+
+if(!file.exists("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/NCJ2_ImpactReporter.PDF")){
+  PDF_Ordering <- c(paste0("report_",1:nrow(TOAST),"_of_",nrow(TOAST), ".pdf"))}
+
+PDF_Reports  <- paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/",PDF_Ordering)
+
+#Merge multiple PDFs into single file.
+merge_pdfs(file = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/",PDF_Ordering),
+           outfile = paste0("G:/ScanData/NCJOSI^2/Department Feedback Reports/",gsub(c(".sav"),"",File_Name,ignore.case = TRUE)," {DFR}.pdf"))
+file.remove(PDF_Reports) #This code snippet removes all the individual PDF files from the root NCJOSI2 folder.
+file.remove(list.files("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/",full.names = TRUE, pattern = ".png")) #Removes all graphics associated with last execution.
