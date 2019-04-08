@@ -1,0 +1,1311 @@
+\documentclass{article}
+\usepackage[letterpaper, margin=0.7in, lmargin = 17mm,rmargin = 17mm, bottom=0.8in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage[table]{xcolor}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage{fancyhdr}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+<<include=FALSE>>=
+library(knitr)
+opts_chunk$set(
+concordance=TRUE
+)
+@
+
+\definecolor{POblue}{cmyk}{1.0,.93,.31,.29} %Define the blue color for Reporting.
+
+<<Time Generation, echo = FALSE>>=
+Timee <- format(Sys.Date(), "%B %d, %Y") #date for when the report was generated.
+TimeeYear <- format(Sys.Date(), "%Y") #for copyright purposes.
+@
+
+%Define footer/header for each page of report.
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\rfoot{Page \thepage}
+\cfoot{\textbf{Departmental use only.}}
+\lfoot{Copyright \textsuperscript{\textcopyright} \Sexpr{TimeeYear}, IOS, Inc.}
+\rhead{Document generated on: \Sexpr{Timee}}
+\lhead{}
+\renewcommand{\footrulewidth}{0.4pt}
+
+<<Analysis Bereich, echo = FALSE, message = FALSE, results="asis">>=
+library(haven);library(kableExtra);library(tidyverse)
+library(lubridate);library(tm);library(xlsx);#library(extrafont)
+
+#For pulling in correct demographics.
+SetRegion <- TOAST$Region[1]
+SetSubRegion <- TOAST$SubRegion[1]
+SetState  <- TOAST$State[1]
+
+#For later.
+StateStuff <- cbind(state.abb,state.name)
+
+#Create Adverse Impact Table and then impute into table the values.
+#1 = AA 2 = Asian (AS) 3 = Hispanic 4 = Native American (NA) 5 = White 6 = Other (OT).
+
+#How many tested?
+AA_Testing <- sum(TOAST$Race == 1, na.rm=T)
+AS_Testing <- sum(TOAST$Race == 2, na.rm=T)
+HI_Testing <- sum(TOAST$Race == 3, na.rm=T)
+NA_Testing <- sum(TOAST$Race == 4, na.rm=T)
+PI_Testing <- sum(TOAST$Race == 5, na.rm=T)
+WH_Testing <- sum(TOAST$Race == 6, na.rm=T)
+OT_Testing <- sum(TOAST$Race == 7, na.rm=T)
+
+#This table is needed for some code to run later on where it counts the number of variables that are > 0.
+Eth_Testing <- tibble(Race_Tested = AA_Testing, AS_Testing, HI_Testing, NA_Testing,PI_Testing, WH_Testing, OT_Testing)
+
+#Gender Testing
+MA_Testing <- sum(TOAST$Gender == 1, na.rm=T)
+FE_Testing <- sum(TOAST$Gender == 2, na.rm=T)
+
+#This table is needed for some code to run later on where it counts the number of variables that are > 0.
+Gen_Testing <- tibble(Gender_Tested = MA_Testing, FE_Testing)
+ALL_Testing <- nrow(TOAST)
+
+#What's the relative frequency of that category against all others?
+AA_Frequency <- round(AA_Testing / nrow(TOAST), digits = 2)
+AS_Frequency <- round(AS_Testing / nrow(TOAST), digits = 2)
+HI_Frequency <- round(HI_Testing / nrow(TOAST), digits = 2)
+NA_Frequency <- round(NA_Testing / nrow(TOAST), digits = 2)
+PI_Frequency <- round(PI_Testing / nrow(TOAST), digits = 2)
+WH_Frequency <- round(WH_Testing / nrow(TOAST), digits = 2)
+OT_Frequency <- round(OT_Testing / nrow(TOAST), digits = 2)
+
+#Mean by Race.
+Race_Table   <- group_by(TOAST, Race) %>% summarize(m = mean(Final_Score), sd = sd(Final_Score))
+Race_Table   <- as.data.frame(Race_Table)
+
+#Calculation of Pass Rates.
+AA_Passed   <- sum(TOAST$Race == 1 & TOAST$Status == 1, na.rm=T)
+AA_PassedP1 <- AA_Passed + 1
+AA_PassedM1 <- AA_Passed - 1
+
+AS_Passed <- sum(TOAST$Race == 2 & TOAST$Status == 1, na.rm=T)
+AS_PassedP1 <- AS_Passed + 1
+AS_PassedM1 <- AS_Passed - 1
+
+HI_Passed <- sum(TOAST$Race == 3 & TOAST$Status == 1, na.rm=T)
+HI_PassedP1 <- HI_Passed + 1
+HI_PassedM1 <- HI_Passed - 1
+
+NA_Passed <- sum(TOAST$Race == 4 & TOAST$Status == 1, na.rm=T)
+NA_PassedP1 <- NA_Passed + 1
+NA_PassedM1 <- NA_Passed - 1
+
+PI_Passed <- sum(TOAST$Race == 5 & TOAST$Status == 1, na.rm=T)
+PI_PassedP1 <- PI_Passed + 1
+PI_PassedM1 <- PI_Passed - 1
+
+WH_Passed <- sum(TOAST$Race == 6 & TOAST$Status == 1, na.rm=T)
+
+OT_Passed <- sum(TOAST$Race == 7 & TOAST$Status == 1, na.rm=T)
+OT_PassedP1 <- OT_Passed + 1
+OT_PassedM1 <- OT_Passed - 1
+
+MA_Passed <- sum(TOAST$Gender == 1 & TOAST$Status == 1, na.rm=T)
+FE_Passed <- sum(TOAST$Gender == 2 & TOAST$Status == 1, na.rm=T)
+FE_PassedP1 <- FE_Passed + 1
+FE_PassedM1 <- FE_Passed - 1
+
+ALL_Passed <- sum(TOAST$Status == 1)
+
+#Calculation of Selection Ratios.
+AA_SR     <- (round(AA_Passed / AA_Testing, digits = 3)*100)
+AA_SRP1   <- (round(AA_PassedP1 / AA_Testing, digits = 3)*100)
+AA_SRM1   <- (round(AA_PassedM1 / AA_Testing, digits = 3)*100)
+
+AS_SR     <- (round(AS_Passed / AS_Testing, digits = 3)*100)
+AS_SRP1   <- (round(AS_PassedP1 / AS_Testing, digits = 3)*100)
+AS_SRM1   <- (round(AS_PassedM1 / AS_Testing, digits = 3)*100)
+
+HI_SR     <- (round(HI_Passed / HI_Testing, digits = 3)*100)
+HI_SRP1   <- (round(HI_PassedP1 / HI_Testing, digits = 3)*100)
+HI_SRM1   <- (round(HI_PassedM1 / HI_Testing, digits = 3)*100)
+
+NA_SR     <- (round(NA_Passed / NA_Testing, digits = 3)*100)
+NA_SRP1   <- (round(NA_PassedP1 / NA_Testing, digits = 3)*100)
+NA_SRM1   <- (round(NA_PassedM1 / NA_Testing, digits = 3)*100)
+
+PI_SR     <- (round(PI_Passed / PI_Testing, digits = 3)*100)
+PI_SRP1   <- (round(PI_PassedP1 / PI_Testing, digits = 3)*100)
+PI_SRM1   <- (round(PI_PassedM1 / PI_Testing, digits = 3)*100)
+
+WH_SR     <- (round(WH_Passed / WH_Testing, digits = 3)*100)
+
+OT_SR     <- (round(OT_Passed / OT_Testing, digits = 3)*100)
+OT_SRP1   <- (round(OT_PassedP1 / OT_Testing, digits = 3)*100)
+OT_SRM1   <- (round(OT_PassedM1 / OT_Testing, digits = 3)*100)
+
+MA_SR     <- (round(MA_Passed / MA_Testing, digits = 3)*100)
+
+FE_SR     <- (round(FE_Passed / FE_Testing, digits = 3)*100)
+FE_SRP1   <- (round(FE_PassedP1 / FE_Testing, digits = 3)*100)
+FE_SRM1   <- (round(FE_PassedM1 / FE_Testing, digits = 3)*100)
+
+ALL_SR    <- (round(ALL_Passed / ALL_Testing, digits = 3)*100)
+
+#Calculation of Adverse Impact Ratio.
+AA_AIR    <- round(AA_SR / WH_SR, digits = 3)
+AA_AIRP1  <- round(AA_SRP1 / WH_SR, digits = 3)
+AA_AIRM1  <- round(AA_SRM1 / WH_SR, digits = 3)
+
+AS_AIR    <- round(AS_SR / WH_SR, digits = 3)
+AS_AIRP1  <- round(AS_SRP1 / WH_SR, digits = 3)
+AS_AIRM1  <- round(AS_SRM1 / WH_SR, digits = 3)
+
+HI_AIR    <- round(HI_SR / WH_SR, digits = 3)
+HI_AIRP1  <- round(HI_SRP1 / WH_SR, digits = 3)
+HI_AIRM1  <- round(HI_SRM1 / WH_SR, digits = 3)
+
+NA_AIR    <- round(NA_SR / WH_SR, digits = 3)
+NA_AIRP1  <- round(NA_SRP1 / WH_SR, digits = 3)
+NA_AIRM1  <- round(NA_SRM1 / WH_SR, digits = 3)
+
+PI_AIR    <- round(PI_SR / WH_SR, digits = 3)
+PI_AIRP1  <- round(PI_SRP1 / WH_SR, digits = 3)
+PI_AIRM1  <- round(PI_SRM1 / WH_SR, digits = 3)
+
+OT_AIR    <- round(OT_SR / WH_SR, digits = 3)
+OT_AIRP1    <- round(OT_SRP1 / WH_SR, digits = 3)
+OT_AIRM1    <- round(OT_SRM1 / WH_SR, digits = 3)
+
+#Calculation of Average Score by Race.
+#Calculation of Average Score by Race.
+AA_Mean   <- as.numeric(filter(TOAST, Race == 1) %>% summarize(Mean = mean(Final_Score)))
+AS_Mean   <- as.numeric(filter(TOAST, Race == 2) %>% summarize(Mean = mean(Final_Score)))
+HI_Mean   <- as.numeric(filter(TOAST, Race == 3) %>% summarize(Mean = mean(Final_Score)))
+NA_Mean   <- as.numeric(filter(TOAST, Race == 4) %>% summarize(Mean = mean(Final_Score)))
+PI_Mean   <- as.numeric(filter(TOAST, Race == 5) %>% summarize(Mean = mean(Final_Score)))
+WH_Mean   <- as.numeric(filter(TOAST, Race == 6) %>% summarize(Mean = mean(Final_Score)))
+OT_Mean   <- as.numeric(filter(TOAST, Race == 7) %>% summarize(Mean = mean(Final_Score)))
+
+MA_Mean   <- as.numeric(filter(TOAST, Gender == 1) %>% summarize(Mean = mean(Final_Score)))
+FE_Mean   <- as.numeric(filter(TOAST, Gender == 2) %>% summarize(Mean = mean(Final_Score)))
+
+#Calculation of Standard Deviation for SMD Calculations.
+AA_SD   <- as.numeric(filter(TOAST, Race == 1) %>% summarize(SD = sd(Final_Score)))
+AS_SD   <- as.numeric(filter(TOAST, Race == 2) %>% summarize(SD = sd(Final_Score)))
+HI_SD   <- as.numeric(filter(TOAST, Race == 3) %>% summarize(SD = sd(Final_Score)))
+NA_SD   <- as.numeric(filter(TOAST, Race == 4) %>% summarize(SD = sd(Final_Score)))
+PI_SD   <- as.numeric(filter(TOAST, Race == 5) %>% summarize(SD = sd(Final_Score)))
+WH_SD   <- as.numeric(filter(TOAST, Race == 6) %>% summarize(SD = sd(Final_Score)))
+OT_SD   <- as.numeric(filter(TOAST, Race == 7) %>% summarize(SD = sd(Final_Score)))
+
+MA_SD   <- as.numeric(filter(TOAST, Gender == 1) %>% summarize(SD = sd(Final_Score)))
+FE_SD   <- as.numeric(filter(TOAST, Gender == 2) %>% summarize(SD = sd(Final_Score)))
+
+#Calculation of Standardized Mean Difference.
+AA_SMD  <- (WH_Mean - AA_Mean) / sqrt((((AA_Testing - 1) * (AA_SD ^ 2)) + ((WH_Testing - 1) 
+            * (WH_SD ^ 2))) / (AA_Testing + WH_Testing - 2))
+
+AS_SMD  <- (WH_Mean - AS_Mean) / sqrt((((AS_Testing - 1) * (AS_SD ^ 2)) + ((WH_Testing - 1) 
+            * (WH_SD ^ 2))) / (AS_Testing + WH_Testing - 2))
+
+HI_SMD  <- (WH_Mean - HI_Mean) / sqrt((((HI_Testing - 1) * (HI_SD ^ 2)) + ((WH_Testing - 1) 
+            * (WH_SD ^ 2))) / (HI_Testing + WH_Testing - 2))
+
+NA_SMD  <- (WH_Mean - NA_Mean) / sqrt((((NA_Testing - 1) * (NA_SD ^ 2)) + ((WH_Testing - 1) 
+            * (WH_SD ^ 2))) / (NA_Testing + WH_Testing - 2))
+
+PI_SMD  <- (WH_Mean - PI_Mean) / sqrt((((PI_Testing - 1) * (PI_SD ^ 2)) + ((WH_Testing - 1) 
+            * (WH_SD ^ 2))) / (PI_Testing + WH_Testing - 2))
+
+OT_SMD  <- (WH_Mean - OT_Mean) / sqrt((((OT_Testing - 1) * (OT_SD ^ 2)) + ((WH_Testing - 1) 
+            * (WH_SD ^ 2))) / (OT_Testing + WH_Testing - 2))
+
+FE_SMD  <- (MA_Mean - FE_Mean) / sqrt((((FE_Testing - 1) * (FE_SD ^ 2)) + ((MA_Testing - 1) 
+            * (MA_SD ^ 2))) / (FE_Testing + MA_Testing - 2))
+
+FE_AIR      <- round(FE_SR / MA_SR, digits = 3)
+FE_AIRP1    <- round(FE_SRP1 / MA_SR, digits = 3)
+FE_AIRM1    <- round(FE_SRM1 / MA_SR, digits = 3)
+
+#Size of SMD.
+HI_SMD_Size <- ifelse(HI_SMD <= .20,"trivial",ifelse(HI_SMD >
+               .21 & HI_SMD <.50,"small",ifelse(HI_SMD > .50 & HI_SMD <= .80,"medium",ifelse(HI_SMD > .80,
+               "large",""))))
+
+AA_SMD_Size <- ifelse(AA_SMD <= .20,"trivial",ifelse(AA_SMD >
+               .21 & AA_SMD <.50,"small",ifelse(AA_SMD > .50 & AA_SMD <= .80,"medium",ifelse(AA_SMD > .80,
+               "large",""))))
+
+FE_SMD_Size <- ifelse(FE_SMD <= .20,"trivial",ifelse(FE_SMD >
+               .21 & FE_SMD <.50,"small",ifelse(FE_SMD > .50 & FE_SMD <= .80,"medium",ifelse(FE_SMD > .80,
+               "large",""))))
+
+AIR_Table <- tibble(Class = c("African American","Asian","Hispanic","Native American","Pacific Islander","White","Other", 
+                              "Male", "Female","Overall"),
+                     Passing = c(AA_Passed, AS_Passed, HI_Passed, NA_Passed,PI_Passed, WH_Passed, OT_Passed, MA_Passed, 
+                                 FE_Passed, ALL_Passed),
+                     "Sample.Size" = c(AA_Testing, AS_Testing, HI_Testing, NA_Testing, PI_Testing, WH_Testing, 
+                                       OT_Testing, MA_Testing, FE_Testing, ALL_Testing),
+                     SR = c(paste0(AA_SR,"\\%"), paste0(AS_SR,"\\%"), paste0(HI_SR,"\\%"),
+                            paste0(NA_SR,"\\%"), paste0(PI_SR, "\\%"), paste0(WH_SR,"\\%"), paste0(OT_SR,"\\%"), 
+                            paste0(MA_SR,"\\%"), paste0(FE_SR,"\\%"), paste0(ALL_SR,"\\%")),
+                     AIR = c(ifelse(AA_AIR < .80 & AA_AIRP1 > .80,paste0(AA_AIR,"*"),ifelse(AA_AIR > .80 & 
+                            AA_AIRM1 < .80, paste0(AA_AIR,"*"), AA_AIR)),
+                             ifelse(AS_AIR < .80 & AS_AIRP1 > .80,paste0(AS_AIR,"*"),ifelse(AS_AIR > .80 &
+                            AS_AIRM1 < .80, paste0(AS_AIR,"*"), AS_AIR)),
+                             ifelse(HI_AIR < .80 & HI_AIRP1 > .80,paste0(HI_AIR,"*"),ifelse(HI_AIR > .80 & 
+                           HI_AIRM1 < .80, paste0(HI_AIR,"*"), HI_AIR)),
+                             ifelse(NA_AIR < .80 & NA_AIRP1 > .80,paste0(NA_AIR,"*"),ifelse(NA_AIR > .80 & 
+                            NA_AIRM1 < .80, paste0(NA_AIR,"*"), NA_AIR)),
+                            ifelse(PI_AIR < .80 & PI_AIRP1 > .80,paste0(PI_AIR,"*"),ifelse(PI_AIR > .80 & 
+                            PI_AIRM1 < .80, paste0(PI_AIR,"*"), PI_AIR)),
+                             "Base",
+                             ifelse(OT_AIR < .80 & OT_AIRP1 > .80,paste0(OT_AIR,"*"),ifelse(OT_AIR > .80 & 
+                            OT_AIRM1 < .80, paste0(OT_AIR,"*"), OT_AIR)),
+                             "Base",
+                             ifelse(FE_AIR < .80 & FE_AIRP1 > .80,paste0(FE_AIR,"*"),ifelse(FE_AIR > .80 & 
+                            FE_AIRM1 < .80, paste0(FE_AIR,"*"), FE_AIR)),
+                             ""),
+                    Mean = round(as.numeric(c(AA_Mean, AS_Mean, HI_Mean, NA_Mean, PI_Mean, WH_Mean, OT_Mean, MA_Mean, 
+                                              FE_Mean, mean(TOAST$Final_Score))),digits = 2),
+                    SD   = round(as.numeric(c(AA_SD, AS_SD, HI_SD, NA_SD, PI_SD, WH_SD, OT_SD, MA_SD, FE_SD, 
+                                              sd(TOAST$Final_Score))),digits = 2),
+                    SMD = c(round(AA_SMD,digits = 2),round(AS_SMD,digits = 2),round(HI_SMD,digits = 2)
+                            ,round(NA_SMD, digits = 2),round(PI_SMD, digits = 2),"Base",round(OT_SMD,digits = 2),"Base",
+                            round(FE_SMD,digits = 2),"N/A"))
+@
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=1.01\textwidth]{Figure/IR_NCJ2}
+\end{figure}
+
+%Demographics Table.
+\begin{table}[h]
+\vspace{-10pt}
+\fontsize{11}{11} %font size of the table.
+\begin{flushleft} %This puts the table on the left hand side of the page.
+\begin{tabular}{p{8cm} p{0cm}} %This ensures column width spacing is fixed, so it cannot float.
+    \multicolumn{1}{l}{\Large{\textbf{{\Sexpr{substr(x = File_Name2,start = 1,stop = 28)}}}}}\\
+      \noalign{\global\arrayrulewidth=1mm} %Controls the thickness of the line appearing under Candidate Name.
+    \arrayrulecolor{POblue}\hline \\[-.7em] %Controls  color of line under Agency. -.7em is vertical buffer under line.
+    \textbf{{Administration:}} \Sexpr{DateOfAdmin} \\
+    \textbf{{Number of Candidates Tested:}} \Sexpr{ALL_Testing} \\
+    \textbf{{Examination Form:}} \Sexpr{SetForm} \\
+    \textbf{{Region:}} \Sexpr{SetRegion}\\
+    \textbf{{Sub-Region:}} \Sexpr{SetSubRegion} \\
+    \textbf{{State:}} \Sexpr{SetState}\\
+\end{tabular}
+\end{flushleft}
+\end{table}
+
+%Using This Report Table.
+\begin{table}[h]
+\vspace{-127pt}  %For spacing purposes.
+\fontsize{11}{11} %font size of the table.
+\begin{flushright} %This puts the table on the right hand side of the page.
+\begin{tabular}{p{9cm}} %This ensures the column is  10cm wide.
+    \multicolumn{1}{l}{\Large{\textbf{{General Report Overview}}}}\\
+      \noalign{\global\arrayrulewidth=1mm} %Controls the thickness of the line appearing under Candidate Name.
+    \arrayrulecolor{POblue}\hline \\[-.7em] %Controls the color of the horizontal line appearing under Candidate Name.
+This adverse impact report automatically compiled data from your most recent test administration. Further information 
+concerning the analyses conducted herein is provided at the beginning of this report. 
+\textcolor{red}{Note: This report is intended for departmental use only.}
+\end{tabular}
+\end{flushright}
+\end{table}
+\vspace{-25pt}
+
+\section*{Explanation of Adverse Impact Analyses}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}}
+
+\linespread{1.3}
+
+\noindent \normalsize{This report contains information related to the presence of adverse impact pertaining to your agency's test administration. The statistics used to present this information are adverse impact ratios (AIRs) and standardized mean differences (SMDs). Explanations of these statistical concepts are presented within this section.}
+
+\subsection*{Adverse Impact Ratio}
+\linespread{1.3}
+\normalsize{When evaluating a selection system, it becomes critical to examine the degree to which the system impacts
+members of different subgroups. U.S. law mandates that protected classes, including racial minorities and women, not
+be subject to adverse outcomes in any hiring or promotional process. The initial evaluation of the degree of adverse 
+impact is commonly assessed by adverse impact ratios (AIRs). The pass rate for any given protected class (i.e. African 
+Americans, Women, Hispanics, etc.) should be similar to the pass rate for the non-protected comparison group (i.e. 
+Caucasians, Males). \emph{The Uniform Guidelines on Employee Selection} have defined "similar" to be at least 80
+percent of the rate for the non-protected comparison group. This is commonly referred to as the 4/5\textsuperscript{th}
+rule, and a \emph{prima facie} case of disparate impact is said to exist when the AIR for a certain group fails to 
+meet or exceed this 0.80 threshold. When the AIR is at or above 0.80, there is no indication of adverse impact according
+to the 4/5\textsuperscript{th} rule. The focal question the 4/5\textsuperscript{th} rule aims to answer is, 
+"Does a protected class/group pass a test at a similar rate to that of the corresponding non-protected comparison group?"
+
+\subsection*{Standardized Mean Difference}
+\linespread{1.3}
+
+\noindent A highly sensitive statistic for determining group differences in performance is known as the standardized 
+mean difference (SMD), which is employed in this setting to provide information concerning disparate impact. The 
+SMD provides information on the magnitude of the disparity between groups. The SMD is commonly assessed by Cohen's 
+(1988) \emph{d} measure of effect size and is interpreted as the difference in mean outcome between groups. The advantage 
+of using this statistic is that, since it is a metric expressed on a standard scale, the performance of different 
+selection measures or tools can be compared against industry standards for the degree of subgroup differences that 
+are commonly observed. For example, the standardized mean difference between African American and White populations 
+on cognitive ability tests is typically about 1 standard deviation (i.e., \emph{d} = 1.0).\\ \par
+
+\noindent Values for the standardized mean difference can be negative, zero, or positive with the vast majority 
+of values falling between -2 and 2. A positive value indicates that the non-protected group outperformed the 
+protected group. A value close to zero indicates that the two groups performed reasonably similar, while a 
+negative value indicates that the protected group outperformed the non-protected group. In 1988, Cohen offered 
+conventional interpretations for the effect size as: 0.2 = "small;" 0.5 = "medium;" and 0.8 
+= "large." The SMD values for your local test administration are coded within this report in the following manner:
+
+\linespread{1.0}
+
+<<SMD Reference Table, results = "asis", echo=FALSE>>=
+SMD_Reference <- tibble(`Effect Size` = c("Trivial","Small","Medium","Large"), 
+                        `Color Code` = c("0.00 through 0.20","0.21 through 0.50","0.51 through 0.80", "Greater than 0.80"))
+
+SMD_Reference[1,2] <- cell_spec(SMD_Reference[1,2], "latex", background =  "#009966")
+SMD_Reference[2,2] <- cell_spec(SMD_Reference[2,2], "latex", background = "#33FF99")
+SMD_Reference[3,2] <- cell_spec(SMD_Reference[3,2], "latex", background = "#FFFF33")
+SMD_Reference[4,2] <- cell_spec(SMD_Reference[4,2], "latex", background = "#CC3300")
+
+kable(x = SMD_Reference,align = c('c','c'), "latex",escape=F, booktabs = T) %>%
+kable_styling(position = "center",font_size = 10,full_width = FALSE) %>%
+  row_spec(0, bold = T, background= "white", color = "black")
+@
+\vspace{-18pt}
+
+\begin{center}
+\noindent{\emph{Please note that negative SMD values indicate that the protected group outperformed the non- protected
+group. As such, these differences will be coded as trivial in the presentation of your local results.}}
+\end{center}
+
+\section*{Local Results Synopsis}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}} 
+
+\linespread{1.3}
+
+\noindent \normalsize{The following table presents the adverse impact ratios (AIRs) and standardized mean
+differences (SMDs) for your most recent test administration. As described in the preceding section, the 
+AIR represents the passing rate of a protected group as compared to a non-protected group. If the AIR falls
+below the .80 threshold, adverse impact is said to exist. The other statistic presented in the table, the 
+SMD, represents the degree of the disparity between groups.}\\ \par
+
+\linespread{1.0}
+<<AIR Table, results="asis", echo=FALSE>>=
+AIR_Table %>%
+filter(Sample.Size > 0) %>%
+  mutate(
+    SMD = cell_spec(SMD, "latex", background =  ifelse(SMD <= .2, "#009966", #trivial
+                                                ifelse((SMD > .2 & SMD <= .5), "#33FF99", #small
+                                                ifelse((SMD > .5 & SMD <= .8), "#FFFF33", #medium
+                                                ifelse((SMD > .8 & SMD < 25), "#CC3300","white" #large
+                                                ))))),
+    AIR = cell_spec(AIR,"latex",color = ifelse(AIR < .800, "red","black"))) %>%
+  select(everything()) %>%
+kable(align = c('l','c','c','c','c'), "latex",escape=F, booktabs = T) %>%
+kable_styling(latex_options = "striped",position = "center",font_size = 10,full_width = FALSE) %>%
+  group_rows("Race/Ethnicity", 1,  sum(Eth_Testing > 0), latex_gap_space = "0.3em") %>%
+  row_spec(0, bold = T, background= "white", color = "black") %>%
+  column_spec(column = 8,width = "1.0cm") %>%
+  group_rows("Gender",(sum(Eth_Testing>0) + 1),(sum(Gen_Testing>0)+ sum(Eth_Testing > 0)), latex_gap_space = "0.5em") %>%
+  group_rows("All Applicants", (sum(Eth_Testing >0) + sum(Gen_Testing > 0)+1),(sum(Eth_Testing > 0) + sum(Gen_Testing>0)+1), latex_gap_space = "0.5em") %>%
+  add_footnote(c("SR = Selection Ratio. AIR = Adverse Impact Ratio. SMD = Standardized Mean Difference.",
+                 "An asterisk (*) signifies a relatively small sample size; results may not be representative.",
+                 "AIRs indicating a violation of the 4/5th rule are presented in red text.",
+                 "\"Overall\" reflects total sample, including test-takers who did not report demographic information."),
+                notation = "alphabet") %>%
+  row_spec(((sum(Eth_Testing >0) + sum(Gen_Testing > 0))+1), bold= T)
+@
+
+\linespread{1.3}
+
+<<AIR Verbiage, echo = FALSE, results = "asis", warning=FALSE>>=
+
+#AA_Testing == 0 & HI_Testing == 0. %Checked OK.
+if(HI_Testing == 0 & AA_Testing == 0){AIR_Phrase <- paste0("No candidates in your test administration identified as 
+Hispanic or African American. Therefore, it is not possible to run adverse impact and standardized mean difference 
+analyses for the White-Hispanic and White-African American comparisons for your department. We encourage future recruitment
+efforts to target minority candidates in order to increase the diversity of your testing sample.")}
+
+#AA_Testing == 0 % HI _Testing == 1 & HI_AIR < .80. %Checked OK.
+if(HI_Testing == 1 & HI_AIR < .80 & AA_Testing == 0){AIR_Phrase <- paste0("There were no African Americans in your testing sample, 
+therefore it is not possible to run adverse impact analyses for the White-African American comparison. There was, however, ", HI_Testing, 
+" Hispanic applicant who tested. For the White-Hispanic comparison, an AIR value of ",HI_AIR," was calculated, indicating evidence of adverse 
+impact as assessed by the 4/5th rule. Because there was only ", HI_Testing, " Hispanic applicant, a SMD analysis for the White-Hispanic 
+comparison cannot be run.")}
+
+#AA_Testing == 0 % HI _Testing == 1 & HI_AIR >= .80. %Checked OK.
+if(HI_Testing == 1 & HI_AIR >= .80 & AA_Testing == 0) {AIR_Phrase <- paste0("There were no African Americans in your testing sample, 
+therefore it is not possible to run adverse impact analyses for the White-African American comparison. There was, however, ",HI_Testing, 
+" Hispanic applicant who tested. For the White-Hispanic comparison, an AIR value of ",HI_AIR, " was calculated, which exceeds .80 and indicates 
+no evidence of adverse impact. Because there was only ", HI_Testing, " Hispanic applicant, a SMD analysis for the White-Hispanic comparison 
+cannot be run.")}
+
+#AA_Testing == 0 % HI _Testing > 1 & HI_AIR < .80. %Checked OK.
+if(HI_Testing > 1 & HI_AIR < .80 & AA_Testing == 0) {AIR_Phrase <- paste0("There were no African Americans in your testing sample, therefore
+it is not possible to run adverse impact analyses for the White-African American comparison. There were, however, ", HI_Testing, " Hispanic applicants
+who tested. For the White-Hispanic comparison, an AIR value of ", HI_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 
+4/5th rule. Further, for the White-Hispanic SMD analysis, an effect size of ", round(HI_SMD, digits = 2), " was calculated. This translates to a ", HI_SMD_Size, " difference 
+between the two groups.")}
+
+#AA_Testing == 0 % HI _Testing > 1 & HI_AIR >= .80. %Checked OK.
+if(HI_Testing > 1 & HI_AIR >= .80 & AA_Testing == 0) {AIR_Phrase <- paste0("There were no African Americans in your testing sample, therefore
+it is not possible to run adverse impact analyses for the White-African American comparison. There were, however, ", HI_Testing, " Hispanic applicants
+who tested. For the White-Hispanic comparison, an AIR value of ", HI_AIR, " was calculated, was calculated, which exceeds .80 and indicates no evidence of 
+adverse impact. Further, for the White-Hispanic SMD analysis, an effect size of ", round(HI_SMD, digits = 2), " was calculated. This translates to a ", HI_SMD_Size, " difference 
+between the two groups.")}
+
+#HI_Testing == 0 % AA_Testing == 1 & AA_AIR < .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR < .80 & HI_Testing == 0) {AIR_Phrase <- paste0("There were no Hispanics in your testing sample, therefore it is not 
+possible to run adverse impact analyses for the White-Hispanic comparison. There was, however, ", AA_Testing , " African American applicant who tested. 
+For the White-African American comparison, an AIR value of ", AA_AIR , " was calculated, indicating evidence of adverse impact as assessed by the 4/5th 
+rule. Because there was only ", AA_Testing , " African American applicant, a SMD analysis for the White-African American comparison cannot be run.")}
+
+#HI_Testing == 0 % AA_Testing == 1 & AA_AIR >= .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR >= .80 & HI_Testing == 0) {AIR_Phrase <- paste0("There were no Hispanics in your testing sample, therefore it is not 
+possible to run adverse impact analyses for the White-Hispanic comparison. There was, however, ", AA_Testing, " African American applicant who tested. 
+For the White-African American comparison, an AIR value of ", AA_AIR , " was calculated, which exceeds .80 and indicates no evidence of adverse impact.
+Because there was only ", AA_Testing, " African American applicant, a SMD analysis for the White-African American comparison cannot be run.")}
+
+#HI_Testing == 1 & AA_Testing == 1 & AA_AIR < .80 & HI_AIR < .80.
+if(AA_Testing == 1 & AA_AIR < .80 & HI_Testing == 1 & HI_AIR < .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant 
+in your testing sample. For the White-African American comparison, an AIR value of ", AA_AIR , " was calculated, indicating evidence of adverse impact 
+as assessed by the 4/5th rule. There was also ", HI_Testing, " Hispanic applicant in your testing sample. For the White-Hispanic comparison, the 
+calculated AIR value was ", HI_AIR , ", indicating evidence of adverse impact as assessed by the 4/5th rule. Because there was only ",AA_Testing, " African 
+American applicant and " , HI_Testing ," Hispanic applicant, SMD analyses for the White-African American and White-Hispanic comparisons cannot be run.")}
+
+#HI_Testing == 1 & AA_Testing == 1 & AA_AIR >= .80 & HI_AIR >= .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR >= .80 & HI_Testing == 1 & HI_AIR >= .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your 
+testing sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse 
+impact. There was also ", HI_Testing, " Hispanic applicant in your testing sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, ", 
+which exceeds .80 and indicates no evidence of adverse impact. Because there was only ", AA_Testing, " African American applicant and ", HI_Testing, " Hispanic applicant,
+SMD analyses for the White-African American and White-Hispanic comparisons cannot be run.")}
+
+#HI_Testing == 1 & AA_Testing == 1 & AA_AIR < .80 & HI_AIR >= .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR < .80 & HI_Testing == 1 & HI_AIR >= .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your 
+testing sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse 
+impact. There was also ", HI_Testing, " Hispanic applicant in your testing sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, ", 
+which exceeds .80 and indicates no evidence of adverse impact. Because there was only ", AA_Testing, " African American applicant and ", HI_Testing, " Hispanic applicant,
+SMD analyses for the White-African American and White-Hispanic comparisons cannot be run.")}
+
+#HI_Testing == 1 & AA_Testing == 1 & AA_AIR < .80 & HI_AIR >= .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR < .80 & HI_Testing == 1 & HI_AIR >= .80) {AIR_Phrase <- paste0("There was ",AA_Testing, " African American applicant in your testing 
+sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. 
+There was also ", HI_Testing, " Hispanic applicant in your testing sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR,", which exceeds .80
+and indicates no evidence of adverse impact. Because there was only ",  AA_Testing, " African American applicant and ", HI_Testing, " Hispanic applicant, SMD analyses for
+the White-African American and White-Hispanic comparisons cannot be run.")}
+
+#AA_Testing == 1 & AA_AIR >= .80 & HI_Testing == 1 & HI_AIR < .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR >= .80 & HI_Testing == 1 & HI_AIR < .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your testing
+sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. There 
+was also ", HI_Testing, " Hispanic applicant in your testing sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, ", indicating evidence of
+adverse impact as assessed by the 4/5th rule. Because there was only ", AA_Testing, " African American applicant and ", HI_Testing, " Hispanic applicant, SMD analyses for
+the White-African American and White-Hispanic comparisons cannot be run.")}
+
+#AA_Testing == 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR < .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR < .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your testing sample.
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Because there 
+was only ", AA_Testing, " African American applicant, an SMD analysis for the White-African American comparison cannot be run. There were ", HI_Testing, " Hispanic applicants in
+your testing sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, " indicating evidence of adverse impact as assessed by the 4/5th rule. 
+Further, for the White-Hispanic SMD analysis, an effect size of ", round(HI_SMD, digits = 2), " was calculated.
+This translates to a " ,HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing == 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR >= .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR >= .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your testing sample. 
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Because there 
+was only ", AA_Testing, " African American applicant, SMD analysis for the White-African American comparison cannot be run. There were ", HI_Testing, " Hispanic applicants in 
+your testing sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, ", which exceeds .80 and indicates no evidence of adverse impact. Further, 
+for the White-Hispanic SMD analysis, an effect size of ", round(HI_SMD, digits = 2), " was calculated. 
+This translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing == 1 & AA_AIR >= .80 & HI_Testing > 1 & HI_AIR < .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR >= .80 & HI_Testing > 1 & HI_AIR < .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your testing sample. 
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. Because there was only ", 
+AA_Testing, " African American applicant, SMD analysis for the White-African American comparison cannot be run. There were ", HI_Testing, " Hispanic applicants in your testing
+sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, ", indicating evidence of adverse impact as assessed by the 4/5th rule. Further, for the 
+White-Hispanic SMD analysis, an effect size of ", round(HI_SMD, digits = 2), " was calculated. 
+This translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing == 1 & AA_AIR >= .80 & HI_Testing > 1 & HI_AIR >= .80. %Checked OK.
+if(AA_Testing == 1 & AA_AIR >= .80 & HI_Testing > 1 & HI_AIR >= .80) {AIR_Phrase <- paste0("There was ", AA_Testing, " African American applicant in your testing sample.
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. Because there was only ",
+AA_Testing, " African American applicant, SMD analysis for the White-African American comparison cannot be run. There were ", HI_Testing, " Hispanic applicants in your testing
+sample. For the White-Hispanic comparison, the calculated AIR value was ", HI_AIR, ", which exceeds .80 and indicates no evidence of adverse impact. Further, for the 
+White-Hispanic SMD analysis, an effect size of ", round(HI_SMD, digits = 2), " was calculated. 
+This translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing > 1 & AA_AIR < .80 & HI_Testing == 0. %Checked OK.
+if(AA_Testing > 1 & AA_AIR < .80 & HI_Testing  == 0) {AIR_Phrase <- paste0("There were no Hispanics in your testing sample, therefore it is not possible 
+to run adverse impact analyses for the White-Hispanic comparison. There were, however, ", AA_Testing, " African American applicants who tested. For the White-African American 
+comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Further, for the White-African American SMD analysis,
+an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a ", AA_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing > 1 & AA_AIR >= .80 & HI_Testing == 0. %Checked OK.
+if(AA_Testing > 1 & AA_AIR >= .80 & HI_Testing  == 0) {AIR_Phrase <- paste0("There were no Hispanics in your testing sample, therefore it is not possible to run 
+adverse impact analyses for the White-Hispanic comparison. There were, however, ", AA_Testing, " African American applicants who tested. For the White-African American 
+comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. Further, for the White-African American SMD analysis,
+an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a " ,AA_SMD_Size, " difference between the two groups.")}
+
+#A_Testing > 1 & AA_AIR < .80 & HI_Testing == 1 & HI_AIR < .8. %Checked OK.
+if(AA_Testing > 1 & AA_AIR < .80 & HI_Testing  == 1 & HI_AIR < .8) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your testing sample. 
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Further, for the 
+White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a ", AA_SMD_Size, " difference between the two groups.
+Your testing sample also contained ", HI_Testing, " Hispanic applicant. An AIR value of ", HI_AIR, " was calculated for the White-Hispanic comparison, indicating evidence of adverse 
+impact as assessed by the 4/5th rule. Because there was only ", HI_Testing, " Hispanic applicant, SMD analysis for the White-Hispanic comparison cannot be run.")}
+
+#AA_Testing > 1 & AA_AIR < .80 & HI_Testing == 1 & HI_AIR >= .8. %Checked OK.
+if(AA_Testing > 1 & AA_AIR < .80 & HI_Testing  == 1 & HI_AIR >= .8) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your testing sample. 
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Further, for the
+White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a ", AA_SMD_Size, " difference between the two groups. 
+Your testing sample also contained ", HI_Testing, " Hispanic applicant. An AIR value of ", HI_AIR, " was calculated for the White-Hispanic comparison, which exceeds .80 and 
+indicates no evidence of adverse impact. Because there was only ", HI_Testing, " Hispanic applicant, SMD analysis for the White-Hispanic comparison cannot be run.")}
+
+#AA_Testing > 1 & AA_AIR >= .80 & HI_Testing == 1 & HI_AIR >= .8. %Checked OK.
+if(AA_Testing > 1 & AA_AIR >= .80 & HI_Testing  == 1 & HI_AIR >= .8) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your testing 
+sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. Further, 
+for the White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a " ,AA_SMD_Size, " difference between
+the two groups. Your testing sample also contained ", HI_Testing, " Hispanic applicant. An AIR value of ", HI_AIR, " was calculated for the White-Hispanic comparison,
+which exceeds .80 and indicates no evidence of adverse impact. Because there was only ", HI_Testing, " Hispanic applicant, SMD analysis for the White-Hispanic 
+comparison cannot be run.")}
+
+#AA_Testing > 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR < .8. %Checked OK.
+if(AA_Testing > 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR < .8) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your testing sample.
+For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Further, for 
+the White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a ", AA_SMD_Size, " difference between the 
+two groups. Your testing sample also contained ", HI_Testing, " Hispanic applicants. An AIR value of ", HI_AIR, " was calculated for the White-Hispanic comparison, 
+indicating evidence of adverse impact as assessed by the 4/5th rule. The SMD for this comparison was ", round(HI_SMD, digits = 2), ", which translates to 
+a ", HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing > 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR >= .8. %Checked OK.
+if(AA_Testing > 1 & AA_AIR < .80 & HI_Testing > 1 & HI_AIR >= .8) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your 
+testing sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, indicating evidence of adverse impact as assessed by 
+the 4/5th rule. Further, for the White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a
+", AA_SMD_Size, " difference between the two groups. Your testing sample also contained ", HI_Testing, " Hispanic applicants. An AIR value of ", HI_AIR, " was 
+calculated for the White-Hispanic comparison, which exceeds .80 and indicates no evidence of adverse impact. The SMD for this comparison was ", round(HI_SMD, digits = 2), ", 
+which translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing > 1 & AA_AIR >=.80 & HI_Testing > 1 & HI_AIR < .8. %Checked OK.
+if(AA_Testing > 1 & AA_AIR >= .80 & HI_Testing > 1 & HI_AIR < .8) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your 
+testing sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse
+impact. Further, for the White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to 
+a ", AA_SMD_Size, " difference between the two groups. Your testing sample also contained ", HI_Testing, " Hispanic applicants. An AIR value of ", HI_AIR, " was 
+calculated for the White-Hispanic comparison, indicating evidence of adverse impact as assessed by the 4/5th rule. The SMD for this comparison was ", round(HI_SMD, digits = 2),
+", which translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#AA_Testing > 1 % HI _Testing > 1 & HI_AIR >= .80 & AA_AIR >= .80. %Checked OK.
+if(HI_Testing > 1 & HI_AIR >= .80 & AA_Testing > 1 & AA_AIR >= .80) {AIR_Phrase <- paste0("There were ", AA_Testing, " African American applicants in your testing
+sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. Further,
+for the White-African American SMD analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a ",AA_SMD_Size, " difference between the two groups. Your testing
+sample also contained ", HI_Testing, " Hispanic applicants. An AIR value of ", HI_AIR, " was calculated for the White-Hispanic comparison, which exceeds .80 and indicates
+no evidence of adverse impact. The SMD for this comparison was ", round(HI_SMD, digits = 2), " which translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#FE_Testing == 0. %Checked OK.
+if(FE_Testing == 0) {AIR_Phrase2 <- paste0("No candidates in your test administration identified as Female. Therefore, it is not possible to run adverse impact 
+and standardized mean difference analyses for the Male-Female comparison for your department.")}
+
+#FE_Testing == 1 & FE_AIR < .80. %Checked OK.
+if(FE_Testing == 1 & FE_AIR < .80) {AIR_Phrase2 <- paste0("There was ", FE_Testing, " female applicant in your testing sample. For the Male-Female 
+comparison, an AIR value of ", FE_AIR, " was calculated, indicating evidence of adverse impact as assessed by the 4/5th rule. Because there was 
+only ", FE_Testing, " female applicant, SMD analysis for the Male-Female comparison cannot be run.")}
+
+#FE_Testing == 1 & FE_AIR >= .80. %Checked OK.
+if(FE_Testing == 1 & FE_AIR >= .80) {AIR_Phrase2 <- paste0("There was ", FE_Testing, " female applicant in your testing sample. For the Male-Female 
+comparison, an AIR value of ", FE_AIR, " was calculated, which exceeds .80 and indicates no evidence of adverse impact. Because there was 
+only ", FE_Testing, " female applicant, SMD analysis for the Male-Female comparison cannot be run.")}
+
+#FE_Testing > 1 & FE_AIR < .80. %Checked OK.
+if(FE_Testing > 1 & FE_AIR < .80) {AIR_Phrase2 <- paste0("Adverse impact analyses were also conducted for the Male-Female comparison. 
+There were ", FE_Testing, " female applicants in your testing sample. For the Male-Female comparison, an AIR value of ", FE_AIR,  " was calculated,
+indicating evidence of adverse impact as assessed by the 4/5th rule. Further, for the Male-Female SMD analysis, an effect size of ", round(FE_SMD, digits = 2),
+" was calculated.This translates to a ", FE_SMD_Size, " difference between the two groups.")}
+
+#FE_Testing > 1 & FE_AIR >= .80. %Checked OK.
+if(FE_Testing > 1 & FE_AIR >= .80) {AIR_Phrase2 <- paste0("Adverse impact analyses were also conducted for the Male-Female comparison. There 
+were ", FE_Testing, " female applicants in your testing sample. For the Male-Female comparison, an AIR value of ", FE_AIR, " was calculated, which
+exceeds .80 and indicates no evidence of adverse impact. Further, for the Male-Female SMD analysis, an effect size of ", round(FE_SMD, digits = 2),
+" was calculated. This translates to a ", FE_SMD_Size, " difference between the two groups.")}
+
+if(HI_Testing > 1 & HI_AIR >= .80 & AA_AIR >= .80 & AA_Testing > 1){AIR_Phrase <- paste0("There were ", AA_Testing, " African 
+American applicants in your testing sample. For the White-African American comparison, an AIR value of ", AA_AIR, " was 
+calculated, which exceeds .80 and indicates no evidence of adverse impact. Further, for the White-African American SMD 
+analysis, an effect size of ", round(AA_SMD, digits = 2), " was calculated. This translates to a ",AA_SMD_Size, " difference
+between the two groups. Your testing sample also contained ", HI_Testing, " Hispanic applicants. An AIR value of ", HI_AIR,
+" was calculated for the White-Hispanic comparison, which exceeds .80 and indicates no evidence of adverse impact. The SMD 
+for this comparison was ", round(HI_SMD, digits = 2), " which translates to a ", HI_SMD_Size, " difference between the two groups.")}
+
+#Overall Summary Conclusions
+#This code creates a Vector of AIR values excluding NA to trigger the appropriate summary statement.
+#Races included in this are Hispanic, AA, Asian, Female, and Native American.
+Vector <- c(HI_AIR, AA_AIR, AS_AIR, FE_AIR, NA_AIR)
+Vector <- Vector[!is.na(Vector)]
+Summary_AIR <- suppressWarnings(ifelse(any(Vector < .80),
+c("With the above-mentioned results in mind, it is important to recognize that a violation of any disparate impact statistic does not 
+necessarily indicate that a test is discriminatory or in violation of legal statutes. A test that contains sufficient validation evidence
+to show that the test is predictive of bona fide job requirements would not be considered discriminatory and would be legally justifiable
+to use. The examination is backed by extensive validation evidence demonstrating that it is valid for selecting qualified individuals for
+the job of an entry-level law enforcement officer.Best practice always dictates that the test user must demonstrate that the test is
+substantially related to the local job it is being used to select for. Some form of local validity evidence is always necessary to support the use 
+of a test. We recommend that your agency performs a transportability study to substantiate the use of the examination locally. IOS offers a method that allows 
+for this to be accomplished at no cost to your agency. This will provide defense for your use of the exam, should a legal challenge arise. Please contact IOS 
+to learn more information about our free transportability study offer."),c("In summary, no evidence of adverse impact within your test 
+administration for any protected subgroup has been noted. While this outcome is favorable, best practice always dictates that the test 
+user must demonstrate that the test is substantially related to the local job it is being used to select for. We recommend that your
+agency performs a transportability study to substantiate the use of the examination locally. IOS offers a method that allows for
+this to be accomplished at no cost to your agency. This will provide defense for your use of the exam, should a legal challenge arise.
+Please contact IOS to learn more information about our free transportability study offer.")))
+@
+
+\noindent \normalsize {The overall pass rate for your agency's recent test administration was \Sexpr{AIR_Table[10,4]}. 
+In other words, \Sexpr{ALL_Passed} out of \Sexpr{ALL_Testing} candidates passed the examination.  Discussion of 
+the analyses of pass rate differences between race groups will be emphasized for the White-Hispanic and White-African
+American comparisons, where applicable. While the statistics for all race/ethnicity subgroups are recorded in the table 
+above, the other subgroups will not be further addressed.} \\ \par
+
+\noindent \normalsize{\Sexpr{(print(AIR_Phrase))}} \\  \par
+
+\noindent \normalsize{\Sexpr{(print(AIR_Phrase2))}} \\ \par
+
+\noindent \normalsize{\Sexpr{(print(Summary_AIR))}} \\ \par
+
+\linespread{1.3}
+
+\noindent \normalsize{In the remaining sections of this report, the AIRs from your test administration are compared to 
+the AIRs found at the State, Sub-Regional, Regional and National levels. }
+
+\newpage
+
+\section*{State Results Comparison}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}} 
+
+\linespread{1.3}
+
+\noindent \normalsize{The first comparison was conducted at the state-wide level. Normative data has been aggregated 
+from various agencies testing within your state. An AIR was calculated for each race/ethnicity and gender subgroup at
+the state-wide level to serve as a comparison to the AIRs calculated for your most recent test administration. The 
+results of these comparisons are graphically displayed below. If a bar is not printed for a particular subgroup on 
+the graph, it signifies that the subgroup contained less than the minimum threshold of candidates to perform accurate
+calculations (a sample size of at least \Sexpr{Min_Thresh} candidates). For discussion, only the White-Hispanic, 
+White-African American and Male-Female comparisons will be emphasized.} \\ \par
+
+<<AIR State Graphic, echo=FALSE>>=
+temp_state <- Middleman_State %>% #AIR
+                filter(State == SetState) %>%
+                select(6,8,10,12,18) %>%
+                as.numeric()
+
+temp_state2 <- Middleman_State %>% #SAMPLE
+                filter(State == SetState) %>%
+                select(7,9,11,13,19) %>%
+                as.numeric()
+
+State_Tibble <- tibble(Class = c("African American","Hispanic","Asian","Other","Female",
+                                 "African American","Hispanic","Asian","Other","Female"),
+                       Region = c(rep(SetState,times=5), rep(File_Name2,times = 5)),
+                       AIR = as.numeric(c(paste0(temp_state),AA_AIR,HI_AIR,AS_AIR,OT_AIR,FE_AIR)),
+                       Sample = as.numeric(c(paste0(temp_state2), AA_Testing, HI_Testing, AS_Testing, OT_Testing, FE_Testing)))
+
+AIR_State_Graphic <-
+State_Tibble %>%
+    mutate(Class  = factor(Class,
+                           levels=c("African American","Hispanic","Asian","Other","Female")),
+           Region = factor(Region, 
+                           levels = c(SetState,File_Name2)),
+           AIR2 = ifelse(AIR > 1, 1, AIR)) %>%
+  filter(Sample >= Min_Thresh) %>%
+  ggplot(aes(x= Region,
+             y = AIR2, 
+             fill = Region)) +
+  geom_bar(stat = "identity") + 
+  facet_wrap( ~ Class,
+              nrow = 5,
+              scales = "fixed") +
+  coord_flip() +
+  geom_hline(yintercept = .80,
+             linetype = "dashed",
+             size = 0.5) +
+  geom_hline(yintercept = .00, 
+             linetype = "solid", 
+             size = 0.5) +
+  geom_hline(yintercept = 1.0, 
+             linetype = "solid", 
+             size = 0.5) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8,
+                                   family = "sans",
+                                   face = c("plain","plain","plain","plain","bold","plain")),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 11,
+                                  family = "sans"), 
+        axis.title.y = element_blank(),
+        strip.background.x = element_blank(),
+        axis.text.y = element_text(family = "sans", 
+                                   size = 11,
+                                   colour = "black"),
+        axis.ticks.y = element_blank(), 
+        panel.spacing = unit(0.1,"lines"),
+        panel.background = element_rect(fill = "white"))  +
+    geom_text(aes(label = format(AIR, digits = 2), 
+                  y = (AIR2)),
+              hjust = 1.5,
+              colour = "white",
+              family = "sans", 
+              size = 4) +
+    geom_text(aes(label = format(paste0("(N=",Sample,")"),
+                                 digits = 3), 
+                  y = (0), 
+                  hjust = 1.15),
+              colour = "black",
+              size = 2.7,
+              family = "sans") +
+    scale_y_continuous(limits = c(0,1.0),
+                       expand = c(.18,0),
+                       breaks = c(.0,.2,.4,.6,.8,1.0), 
+                       labels = c(".0",".2",".4",".6",".8","1.0+")) +
+    guides(fill=FALSE) + 
+    scale_fill_manual(values = c("#002060","dodgerblue3"))
+
+ggsave(plot = AIR_State_Graphic,
+       filename = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","IR_State_Graphic.png"),
+       device = "png",
+       dpi = 400,
+       height = 95,
+       width = 140,
+       units = "mm")
+
+rm(temp_state, temp_state2)
+@
+
+\begin{figure}[H]
+\begin{center}
+\vspace{-2pt}
+\includegraphics{Figure/IR_State_Graphic}
+\end{center}
+\end{figure}
+
+\noindent{\Sexpr{ifelse(State_Tibble[6,4] > Min_Thresh & State_Tibble[1,4] > Min_Thresh,paste0(" The calculated AIR for the 
+White-African American comparison in your test administration was ",round(AA_AIR, digits = 2),", and the calculated AIR at the
+state-wide level for the White-African American comparison was ",round(State_Tibble[1,3], digits = 2),", based on  a sample 
+size of ",State_Tibble[1,4]," applicants."),paste0("Since the African American sample size was exceedingly small for your most 
+recent test administration, only the AIR at the state-wide level is displayed for the White-African American comparison. The 
+AIR for the White-African American comparison at the state-wide level was calculated at ",round(State_Tibble[1,3], digits = 2),
+", based on  a sample size of ",State_Tibble[1,4]," applicants."))}\Sexpr{ifelse(State_Tibble[7,4] > Min_Thresh & State_Tibble[2,4]
+> Min_Thresh,paste0(" The calculated AIR for the White-Hispanic comparison in your test administration was ",round(HI_AIR, digits = 2),
+", and the calculated AIR at the state-wide level for the White-Hispanic comparison was ",round(State_Tibble[2,3], digits = 2),", 
+based on  a sample size of ",State_Tibble[2,4]," applicants."),paste0(" Since the Hispanic sample size was exceedingly small for your
+most recent test administration, only the AIR at the state-wide level is displayed for the White-Hispanic comparison. The AIR for
+the White-Hispanic comparison at the state-wide level was calculated at ",round(State_Tibble[2,3], digits = 2),", based on  a 
+sample size of ",State_Tibble[2,4]," applicants."))}\Sexpr{ifelse(State_Tibble[10,4] > Min_Thresh & State_Tibble[5,4] > Min_Thresh,
+paste0(" The calculated AIR for the Male-Female comparison in your test administration was ",round(FE_AIR, digits = 2),", and the 
+calculated AIR at the state-wide level for the Male-Female comparison was ",round(State_Tibble[5,3], digits = 2),",
+based on  a sample size of ",State_Tibble[5,4]," applicants."),paste0(" Since the Female sample size was exceedingly small for your 
+most recent test administration, only the AIR at the state-wide level is displayed for the Male-Female comparison. The AIR for the 
+Male-Female comparison at the state-wide level was ",round(State_Tibble[5,3], digits = 2),", based on a sample size
+of ",State_Tibble[5,4]," applicants."))}}
+
+\newpage
+
+\section*{Sub-Regional Results Comparison}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}} 
+
+\noindent \normalsize{The second comparison was conducted at the sub-regional level. Normative data has been aggregated from various 
+agencies testing within your sub-region. An AIR was calculated for each race/ethnicity and gender subgroup at the sub-region level to
+serve as a comparison to the AIRs calculated for your most recent test administration. The appendix provides further information 
+concerning which states are in your sub-region. The results of these comparisons are graphically displayed below. If a bar is not 
+printed for a particular subgroup on the graph, it signifies that the subgroup contained less than the minimum threshold of candidates
+to perform accurate calculations (a sample size of at least \Sexpr{Min_Thresh} candidates). For discussion, only the White-Hispanic, 
+White-African American and Male-Female comparisons will be emphasized.} \\ \par
+
+<<AIR SubRegion Graphic, echo=FALSE>>=
+temp_subregion <- Middleman_SubRegion %>%
+                filter(SubRegion == SetSubRegion) %>%
+                select(4,6,8,10,15) %>%
+                as.numeric()
+
+temp_subregion2 <- Middleman_SubRegion %>%
+                filter(SubRegion == SetSubRegion) %>%
+                select(5,7,9,11,16) %>%
+                as.numeric()
+
+SubRegion_Tibble <-    tibble(Class = c("African American","Hispanic","Asian","Other","Female",
+                                        "African American","Hispanic","Asian","Other","Female"),
+                       Region = c(rep(SetSubRegion,times=5), rep(File_Name2,times = 5)),
+                       AIR = as.numeric(c(paste0(temp_subregion),AA_AIR,HI_AIR,AS_AIR,OT_AIR,FE_AIR)),
+                       Sample = as.numeric(c(paste0(temp_subregion2), AA_Testing, HI_Testing, AS_Testing, OT_Testing, FE_Testing)))
+
+AIR_SubRegion_Graphic <-
+SubRegion_Tibble %>%
+    mutate(Class  = factor(Class,
+                           levels=c("African American","Hispanic","Asian","Other","Female")),
+           Region = factor(Region, 
+                           levels = c(SetSubRegion,
+                                      File_Name2)),
+           AIR2 = ifelse(AIR > 1, 1, AIR)) %>%
+  filter(Sample >= Min_Thresh) %>%
+  ggplot(aes(x= Region, 
+             y = AIR2, 
+             fill = Region)) +
+  geom_bar(stat = "identity") + 
+  facet_wrap( ~ Class,nrow = 5,
+              scales = "fixed") + 
+  coord_flip() +
+  geom_hline(yintercept = .80,
+             linetype = "dashed",
+             size = 0.5) +
+  geom_hline(yintercept = .00, 
+             linetype = "solid", 
+             size = 0.5) +
+  geom_hline(yintercept = 1.0, 
+             linetype = "solid", 
+             size = 0.5) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8,
+                                   family = "sans",
+                                   face = c("plain","plain","plain","plain","bold","plain")),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 11,
+                                  family = "sans"), 
+        axis.title.y = element_blank(),
+        strip.background.x = element_blank(),
+        axis.text.y = element_text(family = "sans", 
+                                   size = 11,
+                                   colour = "black"),
+        axis.ticks.y = element_blank(), 
+        panel.spacing = unit(0.1,"lines"),
+        panel.background = element_rect(fill = "white"))  +
+    geom_text(aes(label = format(AIR, digits = 2), 
+                  y = (AIR2)),
+              hjust = 1.5,
+              colour = "white",
+              family = "sans", size = 4) +
+    geom_text(aes(label = format(paste0("(N=",Sample,")"),
+                                 digits = 3), 
+                  y = (0), 
+                  hjust = 1.15),
+              colour = "black",
+              size = 2.7,
+              family = "sans") +
+    scale_y_continuous(limits = c(0,1.0),
+                       expand = c(.18,0),
+                       breaks = c(.0,.2,.4,.6,.8,1.0), 
+                       labels = c(".0",".2",".4",".6",".8","1.0+")) +
+    guides(fill=FALSE) + 
+    scale_fill_manual(values = c("#002060","dodgerblue3"))
+
+ggsave(plot = AIR_SubRegion_Graphic,
+       filename = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","IR_SubRegion_Graphic.png"),
+       device = "png",
+       dpi = 400,
+       height = 95,
+       width = 155,
+       units = "mm")
+
+rm(temp_subregion, temp_subregion2)
+@
+
+\begin{figure}[H]
+\begin{center}
+\vspace{-2pt}
+\includegraphics{Figure/IR_SubRegion_Graphic}
+\end{center}
+\end{figure}
+
+\noindent{\Sexpr{ifelse(SubRegion_Tibble[6,4] > Min_Thresh & SubRegion_Tibble[1,4] > Min_Thresh,paste0(" The calculated AIR for the 
+White-African American comparison in your test administration was ",round(AA_AIR, digits = 2),", and the calculated AIR at the
+sub-regional level for the White-African American comparison was ",round(SubRegion_Tibble[1,3], digits = 2),", based on  a sample 
+size of ",SubRegion_Tibble[1,4]," applicants."),paste0("Since the African American sample size was exceedingly small for your most 
+recent test administration, only the AIR at the sub-regional level is displayed for the White-African American comparison. The 
+AIR for the White-African American comparison at the sub-regional level was calculated at ",round(SubRegion_Tibble[1,3], digits = 2),
+", based on  a sample size of ",SubRegion_Tibble[1,4]," applicants."))}\Sexpr{ifelse(SubRegion_Tibble[7,4] > Min_Thresh & SubRegion_Tibble[2,4]
+> Min_Thresh,paste0(" The calculated AIR for the White-Hispanic comparison in your test administration was ",round(HI_AIR, digits = 2),
+", and the calculated AIR at the sub-regional level for the White-Hispanic comparison was ",round(SubRegion_Tibble[2,3], digits = 2),", 
+based on  a sample size of ",SubRegion_Tibble[2,4]," applicants."),paste0(" Since the Hispanic sample size was exceedingly small for your
+most recent test administration, only the AIR at the sub-regional level is displayed for the White-Hispanic comparison. The AIR for
+the White-Hispanic comparison at the sub-regional level was calculated at ",round(SubRegion_Tibble[2,3], digits = 2),", based on  a 
+sample size of ",SubRegion_Tibble[2,4]," applicants."))}\Sexpr{ifelse(SubRegion_Tibble[10,4] > Min_Thresh & SubRegion_Tibble[5,4] > Min_Thresh,
+paste0(" The calculated AIR for the Male-Female comparison in your test administration was ",round(FE_AIR, digits = 2),", and the 
+calculated AIR at the sub-regional level for the Male-Female comparison ",round(SubRegion_Tibble[5,3], digits = 2),",
+based on  a sample size of ",SubRegion_Tibble[5,4]," applicants."),paste0(" Since the Female sample size was exceedingly small for your 
+most recent test administration, only the AIR at the sub-regional level is displayed for the Male-Female comparison. The AIR for the 
+Male-Female comparison at the sub-regional level was ",round(SubRegion_Tibble[5,3], digits = 2),", based on a sample size
+of ",SubRegion_Tibble[5,4]," applicants."))}}
+
+\newpage
+
+\section*{Regional Results Comparison}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}} 
+
+<<AIR Region Graphic, echo=FALSE>>=
+temp_region <- Middleman_Region %>% #AIR
+                filter(Region == SetRegion) %>%
+                select(4,6,8,14,16) %>%
+                as.numeric()
+
+temp_region2 <- Middleman_Region %>% #SAMPLE
+                filter(Region == SetRegion) %>%
+                select(5,7,9,15,17) %>%
+                as.numeric()
+
+Region_Tibble <-    tibble(Class = c("African American","Hispanic","Asian","Other","Female",
+                                     "African American","Hispanic","Asian","Other","Female"),
+                       Region = c(rep(SetRegion,times=5), rep(File_Name2,times = 5)),
+                       AIR = as.numeric(c(paste0(temp_region),AA_AIR,HI_AIR,AS_AIR,OT_AIR,FE_AIR)),
+                       Sample = as.numeric(c(paste0(temp_region2), AA_Testing, HI_Testing, AS_Testing, OT_Testing, FE_Testing)))
+
+AIR_Region_Graphic <-
+Region_Tibble %>%
+    mutate(Class  = factor(Class,
+                           levels=c("African American","Hispanic","Asian","Other","Female")),
+           Region = factor(Region, 
+                           levels = c(SetRegion,
+                                      File_Name2)),
+           AIR2 = ifelse(AIR > 1, 1, AIR)) %>%
+  filter(Sample >= Min_Thresh) %>%
+  ggplot(aes(x= Region, 
+             y = AIR2, 
+             fill = Region)) +
+  geom_bar(stat = "identity") +
+  facet_wrap( ~ Class,
+              nrow = 5,
+              scales = "fixed") + 
+  coord_flip() +
+  geom_hline(yintercept = .80,
+             linetype = "dashed",
+             size = 0.5) +
+  geom_hline(yintercept = .00, 
+             linetype = "solid", 
+             size = 0.5) +
+  geom_hline(yintercept = 1.0, 
+             linetype = "solid",
+             size = 0.5) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8,
+                                   family = "sans",
+                                   face = c("plain","plain","plain","plain","bold","plain")),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 11,
+                                  family = "sans"), 
+        axis.title.y = element_blank(),
+        strip.background.x = element_blank(),
+        axis.text.y = element_text(family = "sans",
+                                   size = 11,
+                                   colour = "black"),
+        axis.ticks.y = element_blank(), 
+        panel.spacing = unit(0.1,"lines"),
+        panel.background = element_rect(fill = "white"))  +
+    geom_text(aes(label = format(AIR, digits = 2), 
+                  y = (AIR2)),
+              hjust = 1.5,
+              colour = "white",
+              family = "sans",
+              size = 4) +
+    geom_text(aes(label = format(paste0("(N=",Sample,")"),digits = 3), 
+                  y = (0), hjust = 1.15),
+              colour = "black",
+              size = 2.7,
+              family = "sans") +
+    scale_y_continuous(limits = c(0,1.0),
+                       expand = c(.18,0),
+                       breaks = c(.0,.2,.4,.6,.8,1.0),
+                       labels = c(".0",".2",".4",".6",".8","1.0+")) +
+    guides(fill=FALSE) + 
+    scale_fill_manual(values = c("#002060","dodgerblue3"))
+
+ggsave(plot = AIR_Region_Graphic,
+       filename = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","IR_Region_Graphic.png"),
+       device = "png",
+       dpi = 400,
+       height = 95,
+       width = 140,
+       units = "mm")
+
+rm(temp_region, temp_region2)
+@
+
+\noindent \normalsize{The third comparison was conducted at the regional level. Normative data has been aggregated from various 
+agencies testing within your region. An AIR was calculated for each race/ethnicity and gender subgroup at the region level to 
+serve as a comparison to the AIRs calculated for your most recent test administration. The appendix provides further information
+concerning which states are in your region. The results of these comparisons are graphically displayed below. If a bar 
+is not printed for a particular subgroup on the graph, it signifies that the subgroup contained less than the minimum 
+threshold of candidates to perform accurate calculations (a sample size of at least \Sexpr{Min_Thresh} candidates). 
+For discussion, only the White-Hispanic, White-African American and Male-Female comparisons will be emphasized.} \\ \par
+
+\begin{figure}[H]
+\begin{center}
+\vspace{-2pt}
+\includegraphics{Figure/IR_Region_Graphic}
+\end{center}
+\end{figure}
+
+\noindent{\Sexpr{ifelse(Region_Tibble[6,4] > Min_Thresh & Region_Tibble[1,4] > Min_Thresh,paste0(" The calculated AIR for the 
+White-African American comparison in your test administration was ",round(AA_AIR, digits = 2),", and the calculated AIR at the
+regional level for the White-African American comparison was ",round(Region_Tibble[1,3], digits = 2),", based on  a sample 
+size of ",Region_Tibble[1,4]," applicants."),paste0("Since the African American sample size was exceedingly small for your most 
+recent test administration, only the AIR at the regional level is displayed for the White-African American comparison. The 
+AIR for the White-African American comparison at the regional level was calculated at ",round(Region_Tibble[1,3], digits = 2),
+", based on  a sample size of ",Region_Tibble[1,4]," applicants."))}\Sexpr{ifelse(Region_Tibble[7,4] > Min_Thresh & Region_Tibble[2,4]
+> Min_Thresh,paste0(" The calculated AIR for the White-Hispanic comparison in your test administration was ",round(HI_AIR, digits = 2),
+", and the calculated AIR at the regional level for the White-Hispanic comparison was ",round(Region_Tibble[2,3], digits = 2),", 
+based on  a sample size of ",Region_Tibble[2,4]," applicants."),paste0(" Since the Hispanic sample size was exceedingly small for your
+most recent test administration, only the AIR at the regional level is displayed for the White-Hispanic comparison. The AIR for
+the White-Hispanic comparison at the regional level was calculated at ",round(Region_Tibble[2,3], digits = 2),", based on  a 
+sample size of ",Region_Tibble[2,4]," applicants."))}\Sexpr{ifelse(Region_Tibble[10,4] > Min_Thresh & Region_Tibble[5,4] > Min_Thresh,
+paste0(" The calculated AIR for the Male-Female comparison in your test administration was ",round(FE_AIR, digits = 2),", and the 
+calculated AIR at the regional level for the Male-Female comparison was ",round(Region_Tibble[5,3], digits = 2),",
+based on  a sample size of ",Region_Tibble[5,4]," applicants."),paste0(" Since the Female sample size was exceedingly small for your 
+most recent test administration, only the AIR at the regional level is displayed for the Male-Female comparison. The AIR for the 
+Male-Female comparison at the regional level was ",round(Region_Tibble[5,3], digits = 2),", based on  a sample size
+of ",Region_Tibble[5,4]," applicants."))}}
+
+\newpage
+
+\section*{National Results Comparison}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}}  
+
+\noindent \normalsize{The final comparison was conducted at the national level. Normative data has been aggregated from various 
+agencies that have utilized this examination across the nation. This data will provide a comprehensive look at your department's 
+performance compared to the entire nation. An AIR was calculated for each race/ethnicity and gender subgroup at the national level
+to serve as a comparison to the AIRs calculated for your most recent test administration. The results of these comparisons are 
+graphically displayed below. If a bar is not printed for a particular subgroup on the graph, it signifies that the subgroup 
+contained less than the minimum threshold of candidates to perform accurate calculations (a sample size of at least
+\Sexpr{Min_Thresh} candidates). For discussion, only the White-Hispanic, White-African American and Male-Female 
+comparisons will be emphasized.} \\ \par
+
+<<AIR National Graphic, echo=FALSE>>=
+temp_national <- Middleman_National %>%
+                select(3,5,7,9,15) %>%
+                as.numeric()
+
+temp_national2 <- Middleman_National %>%
+                select(4,6,8,10,16) %>%
+                as.numeric()
+
+National_Tibble <-    tibble(Class = c("African American","Hispanic","Asian","Other","Female",
+                                       "African American","Hispanic","Asian","Other","Female"),
+                       Region = c(rep("National",times=5), rep(File_Name2,times = 5)),
+                       AIR = as.numeric(c(paste0(temp_national),AA_AIR,HI_AIR,AS_AIR,OT_AIR,FE_AIR)),
+                       Sample = as.numeric(c(paste0(temp_national2), AA_Testing, HI_Testing, AS_Testing, OT_Testing, FE_Testing)))
+
+AIR_National_Graphic <-
+National_Tibble %>%
+    mutate(Class  = factor(Class,
+                           levels=c("African American","Hispanic","Asian","Other","Female")),
+           Region = factor(Region, 
+                           levels = c("National",File_Name2)),
+           AIR2 = ifelse(AIR > 1, 1, AIR)) %>%
+  filter(Sample >= Min_Thresh) %>%
+  ggplot(aes(x= Region,
+             y = AIR2, 
+             fill = Region)) +
+  geom_bar(stat = "identity") + 
+  facet_wrap( ~ Class,nrow = 5,
+              scales = "fixed") + 
+  coord_flip() +
+  geom_hline(yintercept = .80,
+             linetype = "dashed",
+             size = 0.5) +
+  geom_hline(yintercept = .00, 
+             linetype = "solid", 
+             size = 0.5) +
+  geom_hline(yintercept = 1.0, 
+             linetype = "solid",
+             size = 0.5) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8,
+                                   family = "sans",
+                                   face = c("plain","plain","plain","plain","bold","plain")),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 11,
+                                  family = "sans"), 
+        axis.title.y = element_blank(),
+        strip.background.x = element_blank(),
+        axis.text.y = element_text(family = "sans", 
+                                   size = 11,
+                                   colour = "black"),
+        axis.ticks.y = element_blank(), 
+        panel.spacing = unit(0.1,"lines"),
+        panel.background = element_rect(fill = "white"))  +
+    geom_text(aes(label = format(AIR, digits = 2),
+                  y = (AIR2)),
+              hjust = 1.5,
+              colour = "white",
+              family = "sans", 
+              size = 4) +
+    geom_text(aes(label = format(paste0("(N=",Sample,")"),
+                                 digits = 3),
+                  y = (0),
+                  hjust = 1.15),
+              colour = "black",
+              size = 2.7,
+              family = "sans") +
+    scale_y_continuous(limits = c(0,1.0),
+                       expand = c(.18,0),
+                       breaks = c(.0,.2,.4,.6,.8,1.0), 
+                       labels = c(".0",".2",".4",".6",".8","1.0+")) +
+    guides(fill=FALSE) + 
+    scale_fill_manual(values = c("#002060","dodgerblue3"))
+
+ggsave(plot = AIR_National_Graphic,
+       filename = paste0("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Figure/","IR_National_Graphic.png"),
+       device = "png",
+       dpi = 400,
+       height = 95,
+       width = 140,
+       units = "mm")
+
+rm(temp_national, temp_national2)
+@
+
+\begin{figure}[H]
+\begin{center}
+\vspace{-2pt}
+\includegraphics{Figure/IR_National_Graphic}
+\end{center}
+\end{figure}
+
+\noindent{\Sexpr{ifelse(National_Tibble[6,4] > Min_Thresh & National_Tibble[1,4] > Min_Thresh,paste0(" The calculated AIR for the 
+White-African American comparison in your test administration was ",round(AA_AIR, digits = 2),", and the calculated AIR at the
+national level for the White-African American comparison was ",round(National_Tibble[1,3], digits = 2),", based on  a sample 
+size of ",National_Tibble[1,4]," applicants."),paste0("Since the African American sample size was exceedingly small for your most 
+recent test administration, only the AIR at the national level is displayed for the White-African American comparison. The 
+AIR for the White-African American comparison at the national level was calculated at ",round(National_Tibble[1,3], digits = 2),
+", based on  a sample size of ",National_Tibble[1,4]," applicants."))}\Sexpr{ifelse(National_Tibble[7,4] > Min_Thresh & National_Tibble[2,4]
+> Min_Thresh,paste0(" The calculated AIR for the White-Hispanic comparison in your test administration was ",round(HI_AIR, digits = 2),
+", and the calculated AIR at the national level for the White-Hispanic comparison was ",round(National_Tibble[2,3], digits = 2),", 
+based on  a sample size of ",National_Tibble[2,4]," applicants."),paste0(" Since the Hispanic sample size was exceedingly small for your
+most recent test administration, only the AIR at the national level is displayed for the White-Hispanic comparison. The AIR for
+the White-Hispanic comparison at the national level was ",round(National_Tibble[2,3], digits = 2),", based on  a 
+sample size of ",National_Tibble[2,4]," applicants."))}\Sexpr{ifelse(National_Tibble[10,4] > Min_Thresh & National_Tibble[5,4] > Min_Thresh,
+paste0(" The calculated AIR for the Male-Female comparison in your test administration was ",round(FE_AIR, digits = 2),", and the 
+calculated AIR at the national level for the Male-Female comparison was ",round(National_Tibble[5,3], digits = 2),",
+based on  a sample size of ",National_Tibble[5,4]," applicants."),paste0(" Since the Female sample size was exceedingly small for your 
+most recent test administration, only the AIR at the national level is displayed for the Male-Female comparison. The AIR for the 
+Male-Female comparison at the national level was ",round(National_Tibble[5,3], digits = 2),", based on a sample size
+of ",National_Tibble[5,4]," applicants."))}}
+
+\newpage
+
+\section*{Appendix}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}} 
+
+\subsection*{Your Regional and Sub-Regional Breakdown}
+
+\linespread{1.3}
+
+Your agency identifies with the \Sexpr{SetRegion} region of the United States, which is comprised of the  states listed in the 
+following table. Additionally, your agency's sub-region is delineated, which is \Sexpr{SetSubRegion}. All calculations and 
+comparisons that were generated in this report used data from these states as a comparison group for your department's performance.
+
+\linespread{1.0}
+
+<<Midwest Region, echo=FALSE>>=
+if(SetRegion == "Midwest"){
+Regions_Midwest   <- c("Indiana","Illinois","Michigan","Ohio","Wisconsin","Iowa","Kansas",
+                       "Minnesota","Missouri","Nebraska","North Dakota","South Dakota")
+SubRegion_Midwest_EastNorthCentral <- c("Indiana","Illinois","Michigan","Ohio","Wisconsin")
+SubRegion_Midwest_WestNorthCentral <- c("Iowa","Kansas","Minnesota","Missouri","Nebraska","North Dakota","South Dakota")
+
+Midwest_Table <- tibble(Region = c("Midwest","","","","","","","","","","",""),
+         `Sub Region` = c("East North Central","","","","","West North Central","","","","","",""),
+         State = c(SubRegion_Midwest_EastNorthCentral,SubRegion_Midwest_WestNorthCentral))
+
+kable(x = Midwest_Table,align = c('c','c','c'), "latex",escape=F, booktabs = T) %>%
+kable_styling(position = "center",font_size = 10,full_width = FALSE) %>%
+  row_spec(0, bold = T, background= "white", color = "black")}
+@
+
+<<Northeast Region, echo=FALSE>>=
+if(SetRegion == "Northeast"){
+Regions_Northeast <- c("Connecticut","Maine","Massachusetts","New Hampshire", "Rhode Island","Vermont",
+                       "New Jersey","New York","Pennsylvania")
+SubRegion_Northeast_NewEngland <- c("Connecticut","Maine","Massachusetts","New Hampshire","Rhode Island","Vermont")
+SubRegion_Northeast_MiddleAtlantic <- c("New Jersey","New York","Pennsylvania")
+
+Northeast_Table <- tibble(Region = c("Northeast",rep("",8)),
+                       `Sub Region` = c("New England",rep("",5),"Middle Atlantic",rep("",2)),
+                        State = c(SubRegion_Northeast_NewEngland,SubRegion_Northeast_MiddleAtlantic))
+
+kable(x = Northeast_Table,align = c('c','c','c'), "latex",escape=F, booktabs = T) %>%
+kable_styling(position = "center",font_size = 10,full_width = FALSE) %>%
+  row_spec(0, bold = T, background= "white", color = "black")}
+@
+
+<<West Region, echo=FALSE>>=
+if(SetRegion == "West"){
+Regions_West      <- c("Arizona","Colorado","Idaho","New Mexico","Montana", "Utah","Nevada","Wyoming",
+                        "Alaska","California","Hawaii","Oregon","Washington")
+SubRegion_West_Mountain <- c("Arizona","Colorado","Idaho","New Mexico","Montana","Utah","Nevada","Wyoming")
+SubRegion_West_Pacific  <- c("Alaska","California","Hawaii","Oregon","Washington")
+
+West_Table <- tibble(Region = c("West",rep("",(length(Regions_West) - 1))),
+                     `Sub Region` = c("Mountain",rep("",(length(SubRegion_West_Mountain) - 1)),
+                                      "Pacific",rep("",(length(SubRegion_West_Pacific) - 1))),
+                        State = c(SubRegion_West_Mountain,SubRegion_West_Pacific))
+
+kable(x = West_Table,align = c('c','c','c'), "latex",escape=F, booktabs = T) %>%
+kable_styling(position = "center",font_size = 10,full_width = FALSE) %>%
+  row_spec(0, bold = T, background= "white", color = "black")}
+@
+
+<<South Region, echo=FALSE>>=
+if(SetRegion == "South"){
+Regions_South     <- c("Delaware","District of Columbia","Florida","Georgia", "Maryland","North Carolina",
+                       "South Carolina","Virginia","West Virginia","Alabama","Kentucky","Mississippi",
+                       "Tennessee","Arkansas","Louisiana","Oklahoma","Texas")
+SubRegion_South_SouthAtlantic <- c("Delaware","District of Columbia","Florida","Georgia","Maryland","North Carolina","South Carolina",
+                                   "Virginia","West Virginia")
+SubRegion_South_EastSouthCentral <- c("Alabama","Kentucky","Mississippi","Tennessee")
+SubRegion_South_WestSouthCentral <- c("Arkansas","Louisiana","Oklahoma","Texas")
+
+South_Table <- tibble(Region = c("South",rep("",(length(Regions_South) - 1))),
+                     `Sub Region` = c("South Atlantic",rep("",(length(SubRegion_South_SouthAtlantic) - 1)),
+                                      "East South Central",rep("",(length(SubRegion_South_EastSouthCentral) - 1)),
+                                      "West South Central",rep("",(length(SubRegion_South_WestSouthCentral) - 1))),
+                        State = c(SubRegion_South_SouthAtlantic,SubRegion_South_EastSouthCentral, SubRegion_South_WestSouthCentral))
+
+kable(x = South_Table,align = c('c','c','c'), "latex",escape=F, booktabs = T) %>%
+kable_styling(position = "center",font_size = 10,full_width = FALSE) %>%
+  row_spec(0, bold = T, background= "white", color = "black")}
+@
+
+
+\subsection*{Norms Compilation}
+
+\linespread{1.3}
+
+<<NORM Modification Time, echo = FALSE>>=
+NormModTime <- file.info("G:/IOSolutions/Research and Development/ClientReportingSystem/NCJOSI2/Norms/NCJOSI2 NORM SCORED.sav")$mtime
+NormModTime <- format(NormModTime, "%B %d, %Y")
+@
+
+The normative dataset utilized in the comparisons within this report was last updated on \Sexpr{NormModTime}. The results of 
+your agency's most recent test administration have also been included in the normative dataset. 
+
+\section*{Contact Information}
+\vspace{-17pt}
+\textcolor{POblue}{\rule{18cm}{1mm}} 
+
+\linespread{1.3}
+
+\noindent Thank you for choosing Industrial/Organizational Solutions (IOS) for your personnel selection needs. 
+We appreciate your business and want to ensure you are receiving excellent service. If you have questions or 
+concerns about the information included in this report, or if there is anything you think we could do to better 
+meet your needs, please let us know. We can be reached via telephone at (888) 784-1290 or info@iosolutions.com 
+during our regular business hours (Monday-Thursday 8:30 AM- 5:00 PM CST; Friday 8:30 AM- 3:00 PM CST).
+
+\end{document}
